@@ -6,8 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { PhotoPoint, KmlLayer, SensorConfig, DEFAULT_SENSOR } from "@/types/photo";
-import { Camera, Map, Layers, BarChart3, Upload, Eye, EyeOff, Trash2 } from "lucide-react";
+import { PhotoPoint, KmlLayer, SensorConfig } from "@/types/photo";
+import { Camera, Map, Layers, BarChart3, Upload, Eye, EyeOff, Trash2, ZoomIn, Palette } from "lucide-react";
 
 interface SidebarProps {
   photos: PhotoPoint[];
@@ -24,8 +24,12 @@ interface SidebarProps {
   onBaseLayerChange: (v: "osm" | "google") => void;
   onToggleKmlLayer: (id: string) => void;
   onRemoveKmlLayer: (id: string) => void;
+  onChangeKmlColor: (id: string, color: string) => void;
+  onZoomToKml: (id: string) => void;
   onSensorChange: (s: SensorConfig) => void;
   onClearPhotos: () => void;
+  loadThumbnails: boolean;
+  onToggleThumbnails: (v: boolean) => void;
 }
 
 const Sidebar = ({
@@ -33,9 +37,23 @@ const Sidebar = ({
   baseLayer, overlapStats,
   onImportPhotos, onImportKml,
   onToggleFootprints, onToggleOverlap, onBaseLayerChange,
-  onToggleKmlLayer, onRemoveKmlLayer, onSensorChange, onClearPhotos,
+  onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onZoomToKml,
+  onSensorChange, onClearPhotos,
+  loadThumbnails, onToggleThumbnails,
 }: SidebarProps) => {
   const [showSensorSettings, setShowSensorSettings] = useState(false);
+
+  const avgSpeed = photos.filter(p => p.speed !== undefined).length > 0
+    ? photos.filter(p => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter(p => p.speed !== undefined).length
+    : undefined;
+
+  const avgAltitude = photos.filter(p => p.altitude !== undefined).length > 0
+    ? photos.filter(p => p.altitude !== undefined).reduce((s, p) => s + (p.altitude ?? 0), 0) / photos.filter(p => p.altitude !== undefined).length
+    : undefined;
+
+  const avgGsd = photos.filter(p => p.gsd !== undefined).length > 0
+    ? photos.filter(p => p.gsd !== undefined).reduce((s, p) => s + (p.gsd ?? 0), 0) / photos.filter(p => p.gsd !== undefined).length
+    : undefined;
 
   return (
     <div className="w-80 h-full overflow-y-auto border-r bg-card p-4 space-y-4">
@@ -66,6 +84,10 @@ const Sidebar = ({
               <span><Upload className="h-4 w-4 mr-2" /> Wybierz zdjęcia</span>
             </Button>
           </label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-foreground">Wczytaj miniaturki</Label>
+            <Switch checked={loadThumbnails} onCheckedChange={onToggleThumbnails} />
+          </div>
           {photos.length > 0 && (
             <div className="flex items-center justify-between">
               <Badge variant="secondary">{photos.length} zdjęć</Badge>
@@ -101,9 +123,25 @@ const Sidebar = ({
             </Button>
           </label>
           {kmlLayers.map((kl) => (
-            <div key={kl.id} className="flex items-center justify-between text-sm">
-              <span className="truncate flex-1 text-foreground">{kl.name}</span>
-              <div className="flex items-center gap-1">
+            <div key={kl.id} className="flex items-center justify-between text-sm gap-1">
+              <span
+                className="truncate flex-1 text-foreground cursor-pointer hover:underline"
+                onClick={() => onZoomToKml(kl.id)}
+                title="Kliknij aby przybliżyć"
+              >
+                {kl.name}
+              </span>
+              <div className="flex items-center gap-0.5">
+                <input
+                  type="color"
+                  value={kl.color}
+                  onChange={(e) => onChangeKmlColor(kl.id, e.target.value)}
+                  className="w-6 h-6 border-0 p-0 cursor-pointer rounded"
+                  title="Zmień kolor"
+                />
+                <Button variant="ghost" size="sm" onClick={() => onZoomToKml(kl.id)} title="Przybliż">
+                  <ZoomIn className="h-3 w-3" />
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => onToggleKmlLayer(kl.id)}>
                   {kl.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                 </Button>
@@ -148,18 +186,19 @@ const Sidebar = ({
             <Switch checked={showFootprints} onCheckedChange={onToggleFootprints} />
           </div>
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-foreground">Pokrycie</Label>
+            <Label className="text-xs text-foreground">Pokrycie (heatmapa)</Label>
             <Switch checked={showOverlapHeatmap} onCheckedChange={onToggleOverlap} />
           </div>
+          <p className="text-xs text-muted-foreground">💡 Kliknij zdjęcie na mapie, aby zobaczyć jego pokrycie z sąsiednimi</p>
         </CardContent>
       </Card>
 
-      {/* Overlap stats */}
+      {/* Flight stats */}
       {photos.length >= 2 && (
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" /> Pokrycie poprzeczne
+              <BarChart3 className="h-4 w-4" /> Statystyki nalotu
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-2 text-sm">
@@ -172,9 +211,28 @@ const Sidebar = ({
               <span className="font-mono font-bold">{overlapStats.avgLateral.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <span>Par sąsiednich:</span>
+              <span>Pary nakładające się:</span>
               <span>{overlapStats.pairs.length}</span>
             </div>
+            <Separator />
+            {avgSpeed !== undefined && (
+              <div className="flex justify-between text-foreground">
+                <span>Śr. prędkość:</span>
+                <span className="font-mono">{avgSpeed.toFixed(1)} m/s ({(avgSpeed * 3.6).toFixed(1)} km/h)</span>
+              </div>
+            )}
+            {avgAltitude !== undefined && (
+              <div className="flex justify-between text-foreground">
+                <span>Śr. wysokość GPS:</span>
+                <span className="font-mono">{avgAltitude.toFixed(1)} m</span>
+              </div>
+            )}
+            {avgGsd !== undefined && (
+              <div className="flex justify-between text-foreground">
+                <span>GSD:</span>
+                <span className="font-mono">{avgGsd.toFixed(2)} cm/px</span>
+              </div>
+            )}
             <Separator />
             <div className="text-xs text-muted-foreground space-y-1">
               <p>Sensor: {sensor.sensorWidth}×{sensor.sensorHeight} mm</p>

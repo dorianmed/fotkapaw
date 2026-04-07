@@ -1,11 +1,12 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
+import L from "leaflet";
 import { Camera } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import { PhotoPoint, KmlLayer, SensorConfig, DEFAULT_SENSOR } from "@/types/photo";
-import { calcFootprint, calcFootprintCorners, analyzeOverlap } from "@/lib/photoUtils";
+import { calcFootprint, calcFootprintCorners, calcGSD, analyzeOverlap, assignHeadings } from "@/lib/photoUtils";
 import { toast } from "sonner";
 
 const Index = () => {
@@ -15,6 +16,9 @@ const Index = () => {
   const [showFootprints, setShowFootprints] = useState(true);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
   const [baseLayer, setBaseLayer] = useState<"osm" | "google">("osm");
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [loadThumbnails, setLoadThumbnails] = useState(false);
+  const mapViewRef = useRef<{ zoomToBounds: (bounds: L.LatLngBoundsExpression) => void } | null>(null);
 
   const overlapStats = analyzeOverlap(photos);
 
@@ -24,19 +28,32 @@ const Index = () => {
 
     for (const file of Array.from(files)) {
       try {
-        const exif = await exifr.parse(file, { gps: true });
+        const exif = await exifr.parse(file, { gps: true, pick: ["DateTimeOriginal", "CreateDate", "GPSAltitude"] });
         if (exif?.latitude && exif?.longitude) {
-          const { groundWidth, groundHeight } = calcFootprint(sensor);
-          const corners = calcFootprintCorners(exif.latitude, exif.longitude, groundWidth, groundHeight);
+          const alt = exif.GPSAltitude ?? sensor.flightAltitude;
+          const { groundWidth, groundHeight } = calcFootprint(sensor, alt);
+          const corners = calcFootprintCorners(exif.latitude, exif.longitude, groundWidth, groundHeight, 0);
+          const gsd = calcGSD(sensor, alt);
+
+          let thumbnailUrl: string | undefined;
+          if (loadThumbnails) {
+            thumbnailUrl = URL.createObjectURL(file);
+          }
+
+          const timestamp = exif.DateTimeOriginal || exif.CreateDate;
+
           newPhotos.push({
             id: `${file.name}-${Date.now()}-${Math.random()}`,
             filename: file.name,
             lat: exif.latitude,
             lng: exif.longitude,
             altitude: exif.GPSAltitude,
+            timestamp: timestamp ? new Date(timestamp) : undefined,
             footprintWidth: groundWidth,
             footprintHeight: groundHeight,
             footprintCorners: corners,
+            gsd,
+            thumbnailUrl,
           });
         } else {
           noGps++;
@@ -47,13 +64,23 @@ const Index = () => {
     }
 
     if (newPhotos.length > 0) {
-      setPhotos((prev) => [...prev, ...newPhotos]);
+      setPhotos((prev) => {
+        const all = [...prev, ...newPhotos];
+        // Assign headings and recalculate rotated footprints
+        const withHeadings = assignHeadings(all);
+        return withHeadings.map(p => {
+          const alt = p.altitude ?? sensor.flightAltitude;
+          const { groundWidth, groundHeight } = calcFootprint(sensor, alt);
+          const corners = calcFootprintCorners(p.lat, p.lng, groundWidth, groundHeight, p.heading ?? 0);
+          return { ...p, footprintCorners: corners, footprintWidth: groundWidth, footprintHeight: groundHeight };
+        });
+      });
       toast.success(`Zaimportowano ${newPhotos.length} zdjęć`);
     }
     if (noGps > 0) {
       toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
     }
-  }, [sensor]);
+  }, [sensor, loadThumbnails]);
 
   const handleImportKml = useCallback(async (file: File) => {
     try {
@@ -68,6 +95,7 @@ const Index = () => {
           id: `kml-${Date.now()}`,
           name: file.name.replace(/\.(kml|kmz)$/i, ""),
           visible: true,
+          color: "#e11d48",
           geojson: geojson as GeoJSON.FeatureCollection,
         },
       ]);
@@ -87,13 +115,28 @@ const Index = () => {
     setKmlLayers((prev) => prev.filter((kl) => kl.id !== id));
   };
 
-  // Drag and drop
+  const handleChangeKmlColor = (id: string, color: string) => {
+    setKmlLayers((prev) =>
+      prev.map((kl) => (kl.id === id ? { ...kl, color } : kl))
+    );
+  };
+
+  const handleZoomToKml = (id: string) => {
+    const layer = kmlLayers.find(kl => kl.id === id);
+    if (!layer) return;
+    const geoLayer = L.geoJSON(layer.geojson);
+    const bounds = geoLayer.getBounds();
+    if (bounds.isValid()) {
+      // We need to access the map - dispatch a custom event
+      window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
+    }
+  };
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       const files = e.dataTransfer.files;
       if (files.length > 0) {
-        // Check if KML
         const firstFile = files[0];
         if (firstFile.name.match(/\.(kml|kmz)$/i)) {
           handleImportKml(firstFile);
@@ -130,8 +173,12 @@ const Index = () => {
         onBaseLayerChange={setBaseLayer}
         onToggleKmlLayer={handleToggleKmlLayer}
         onRemoveKmlLayer={handleRemoveKmlLayer}
+        onChangeKmlColor={handleChangeKmlColor}
+        onZoomToKml={handleZoomToKml}
         onSensorChange={setSensor}
         onClearPhotos={() => setPhotos([])}
+        loadThumbnails={loadThumbnails}
+        onToggleThumbnails={setLoadThumbnails}
       />
       <div className="flex-1 relative">
         <MapView
@@ -140,6 +187,8 @@ const Index = () => {
           showFootprints={showFootprints}
           showOverlapHeatmap={showOverlapHeatmap}
           baseLayer={baseLayer}
+          selectedPhotoId={selectedPhotoId}
+          onPhotoSelect={setSelectedPhotoId}
         />
         {photos.length === 0 && kmlLayers.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

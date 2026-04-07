@@ -5,17 +5,22 @@ export interface PhotoPoint {
   lng: number;
   altitude?: number;
   timestamp?: Date;
+  heading?: number; // flight heading in degrees
+  speed?: number; // m/s
+  thumbnailUrl?: string;
   // Ground footprint in meters
   footprintWidth: number;
   footprintHeight: number;
   // Footprint corners [lat, lng][]
   footprintCorners: [number, number][];
+  gsd?: number; // ground sample distance in cm/px
 }
 
 export interface KmlLayer {
   id: string;
   name: string;
   visible: boolean;
+  color: string;
   geojson: GeoJSON.FeatureCollection;
 }
 
