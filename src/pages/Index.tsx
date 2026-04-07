@@ -6,7 +6,7 @@ import { Camera, Menu, X } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import { PhotoPoint, KmlLayer, SensorConfig, DEFAULT_SENSOR } from "@/types/photo";
-import { calcFootprint, calcFootprintCorners, calcGSD, analyzeOverlap, assignHeadings } from "@/lib/photoUtils";
+import { calcFootprint, calcFootprintCorners, calcGSD, analyzeOverlap, assignHeadings, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
 
 const Index = () => {
