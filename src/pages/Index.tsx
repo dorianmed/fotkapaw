@@ -28,7 +28,7 @@ const Index = () => {
 
     for (const file of Array.from(files)) {
       try {
-        const exif = await exifr.parse(file, { gps: true, pick: ["DateTimeOriginal", "CreateDate", "GPSAltitude"] });
+        const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
         if (exif?.latitude && exif?.longitude) {
           const alt = exif.GPSAltitude ?? sensor.flightAltitude;
           const { groundWidth, groundHeight } = calcFootprint(sensor, alt);
