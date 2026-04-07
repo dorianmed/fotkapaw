@@ -102,10 +102,15 @@ export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
 
   return sorted.map((photo, i) => {
     let heading: number;
-    if (i < sorted.length - 1) {
-      heading = calcBearing(photo.lat, photo.lng, sorted[i + 1].lat, sorted[i + 1].lng);
+    
+    // Aproksymacja: patrzymy 3 punkty w przód/tył, aby zniwelować błędy i "pływanie" GPS
+    const lookAheadIndex = Math.min(i + 3, sorted.length - 1);
+    const lookBackIndex = Math.max(i - 3, 0);
+
+    if (i < sorted.length - 1 && lookAheadIndex > i) {
+      heading = calcBearing(photo.lat, photo.lng, sorted[lookAheadIndex].lat, sorted[lookAheadIndex].lng);
     } else {
-      heading = calcBearing(sorted[i - 1].lat, sorted[i - 1].lng, photo.lat, photo.lng);
+      heading = calcBearing(sorted[lookBackIndex].lat, sorted[lookBackIndex].lng, photo.lat, photo.lng);
     }
 
     let speed: number | undefined;
