@@ -71,7 +71,8 @@ const Index = () => {
         return withHeadings.map(p => {
           const alt = p.altitude ?? sensor.flightAltitude;
           const { groundWidth, groundHeight } = calcFootprint(sensor, alt);
-          const corners = calcFootprintCorners(p.lat, p.lng, groundWidth, groundHeight, p.heading ?? 0);
+          // Dodajemy +90 stopni, by ułożyć wymiary klatki prostopadle do wektora lotu 
+          const corners = calcFootprintCorners(p.lat, p.lng, groundWidth, groundHeight, (p.heading ?? 0) + 90);
           return { ...p, footprintCorners: corners, footprintWidth: groundWidth, footprintHeight: groundHeight };
         });
       });
