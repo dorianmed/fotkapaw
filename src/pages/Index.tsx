@@ -28,50 +28,54 @@ const Index = () => {
     let noGps = 0;
 
 for (const file of Array.from(files)) {
+      let currentExif: any = null;
       try {
-        const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
-        if (exif?.latitude && exif?.longitude) {
-          // 1. Wyciągamy dane o sensorze konkretnie z TEGO zdjęcia
-          const est = estimateSensorDimensions(exif, sensor);
-          const currentSensor = { 
-            ...sensor, 
-            sensorWidth: est.width, 
-            sensorHeight: est.height, 
-            focalLength: est.focal,
-            resolutionX: est.resX 
-          };
-
-          const alt = exif.GPSAltitude ?? sensor.flightAltitude;
-          
-          // 2. Obliczamy wymiary na ziemi
-          const { groundWidth, groundHeight } = calcFootprint(currentSensor, alt);
-          
-          // 3. Sprawdzamy który bok jest dłuższy, by go później ustawić prostopadle
-          const isWide = groundWidth >= groundHeight;
-          const longSide = isWide ? groundWidth : groundHeight;
-          const shortSide = isWide ? groundHeight : groundWidth;
-
-          const timestamp = exif.DateTimeOriginal || exif.CreateDate;
-
-          newPhotos.push({
-            id: `${file.name}-${Date.now()}-${Math.random()}`,
-            filename: file.name,
-            lat: exif.latitude,
-            lng: exif.longitude,
-            altitude: exif.GPSAltitude,
-            timestamp: timestamp ? new Date(timestamp) : undefined,
-            footprintWidth: longSide, // Zawsze traktujemy to jako bok "poprzeczny"
-            footprintHeight: shortSide, // A to jako "wzdłużny"
-            footprintCorners: [], // Policzony zostanie zaraz po wyznaczeniu trajektorii
-            gsd: calcGSD(currentSensor, alt),
-            thumbnailUrl: loadThumbnails ? URL.createObjectURL(file) : undefined,
-          });
-        } else {
+        currentExif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
+        
+        if (!currentExif?.latitude || !currentExif?.longitude) {
           noGps++;
+          continue;
         }
+
+        // 1. Bezpieczna estymacja sensora
+        const est = estimateSensorDimensions(currentExif, sensor);
+        const currentSensor = { 
+          ...sensor, 
+          sensorWidth: est.width, 
+          sensorHeight: est.height, 
+          focalLength: est.focal,
+          resolutionX: est.resX 
+        };
+
+        const alt = currentExif.GPSAltitude ?? sensor.flightAltitude;
+        const { groundWidth, groundHeight } = calcFootprint(currentSensor, alt);
+        
+        // Zawsze ustawiamy dłuższy bok jako szerokość (footprintWidth), 
+        // bo calcFootprintCorners ustawia szerokość prostopadle do kierunku 0 (N)
+        const longSide = Math.max(groundWidth, groundHeight);
+        const shortSide = Math.min(groundWidth, groundHeight);
+
+        const timestamp = currentExif.DateTimeOriginal || currentExif.CreateDate;
+
+        newPhotos.push({
+          id: `${file.name}-${Date.now()}-${Math.random()}`,
+          filename: file.name,
+          lat: currentExif.latitude,
+          lng: currentExif.longitude,
+          altitude: currentExif.GPSAltitude,
+          timestamp: timestamp ? new Date(timestamp) : undefined,
+          footprintWidth: longSide,   // To będzie bok prostopadły do lotu
+          footprintHeight: shortSide, // To będzie bok zgodny z kierunkiem lotu
+          footprintCorners: [], 
+          gsd: calcGSD(currentSensor, alt),
+          thumbnailUrl: loadThumbnails ? URL.createObjectURL(file) : undefined,
+        });
+
       } catch (e) {
-        console.error("Błąd EXIF:", e);
-        noGps++;
+        console.error(`Błąd pliku ${file.name}:`, e);
+        // Jeśli mamy współrzędne, ale wywaliło się na czymś innym, 
+        // nie zwiększamy noGps, tylko logujemy błąd.
+        if (!currentExif?.latitude) noGps++;
       }
     }
 
