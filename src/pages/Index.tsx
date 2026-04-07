@@ -78,14 +78,21 @@ for (const file of Array.from(files)) {
     if (newPhotos.length > 0) {
       setPhotos((prev) => {
         const all = [...prev, ...newPhotos];
-        // Assign headings and recalculate rotated footprints
         const withHeadings = assignHeadings(all);
+        
         return withHeadings.map(p => {
-          const alt = p.altitude ?? sensor.flightAltitude;
-          const { groundWidth, groundHeight } = calcFootprint(sensor, alt);
-          // Dodajemy +90 stopni, by ułożyć wymiary klatki prostopadle do wektora lotu 
-          const corners = calcFootprintCorners(p.lat, p.lng, groundWidth, groundHeight, (p.heading ?? 0) + 90);
-          return { ...p, footprintCorners: corners, footprintWidth: groundWidth, footprintHeight: groundHeight };
+          // Tu dzieje się magia:
+          // heading to kierunek lotu. 
+          // Chcemy, aby "szerokość" (footprintWidth) była prostopadła do lotu.
+          // calcFootprintCorners domyślnie obraca klatkę względem środka.
+          const corners = calcFootprintCorners(
+            p.lat, 
+            p.lng, 
+            p.footprintWidth, 
+            p.footprintHeight, 
+            p.heading ?? 0
+          );
+          return { ...p, footprintCorners: corners };
         });
       });
       toast.success(`Zaimportowano ${newPhotos.length} zdjęć`);
