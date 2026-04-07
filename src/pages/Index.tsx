@@ -27,19 +27,29 @@ const Index = () => {
     const newPhotos: PhotoPoint[] = [];
     let noGps = 0;
 
-    for (const file of Array.from(files)) {
+for (const file of Array.from(files)) {
       try {
         const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
         if (exif?.latitude && exif?.longitude) {
-          const alt = exif.GPSAltitude ?? sensor.flightAltitude;
-          const { groundWidth, groundHeight } = calcFootprint(sensor, alt);
-          const corners = calcFootprintCorners(exif.latitude, exif.longitude, groundWidth, groundHeight, 0);
-          const gsd = calcGSD(sensor, alt);
+          // 1. Wyciągamy dane o sensorze konkretnie z TEGO zdjęcia
+          const est = estimateSensorDimensions(exif, sensor);
+          const currentSensor = { 
+            ...sensor, 
+            sensorWidth: est.width, 
+            sensorHeight: est.height, 
+            focalLength: est.focal,
+            resolutionX: est.resX 
+          };
 
-          let thumbnailUrl: string | undefined;
-          if (loadThumbnails) {
-            thumbnailUrl = URL.createObjectURL(file);
-          }
+          const alt = exif.GPSAltitude ?? sensor.flightAltitude;
+          
+          // 2. Obliczamy wymiary na ziemi
+          const { groundWidth, groundHeight } = calcFootprint(currentSensor, alt);
+          
+          // 3. Sprawdzamy który bok jest dłuższy, by go później ustawić prostopadle
+          const isWide = groundWidth >= groundHeight;
+          const longSide = isWide ? groundWidth : groundHeight;
+          const shortSide = isWide ? groundHeight : groundWidth;
 
           const timestamp = exif.DateTimeOriginal || exif.CreateDate;
 
@@ -50,16 +60,17 @@ const Index = () => {
             lng: exif.longitude,
             altitude: exif.GPSAltitude,
             timestamp: timestamp ? new Date(timestamp) : undefined,
-            footprintWidth: groundWidth,
-            footprintHeight: groundHeight,
-            footprintCorners: corners,
-            gsd,
-            thumbnailUrl,
+            footprintWidth: longSide, // Zawsze traktujemy to jako bok "poprzeczny"
+            footprintHeight: shortSide, // A to jako "wzdłużny"
+            footprintCorners: [], // Policzony zostanie zaraz po wyznaczeniu trajektorii
+            gsd: calcGSD(currentSensor, alt),
+            thumbnailUrl: loadThumbnails ? URL.createObjectURL(file) : undefined,
           });
         } else {
           noGps++;
         }
-      } catch {
+      } catch (e) {
+        console.error("Błąd EXIF:", e);
         noGps++;
       }
     }
