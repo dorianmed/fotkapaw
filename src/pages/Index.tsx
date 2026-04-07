@@ -2,7 +2,6 @@ import { useState, useCallback, useRef } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
-import { Camera } from "lucide-react";
 import { Camera, Menu, X } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
