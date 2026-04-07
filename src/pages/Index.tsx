@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
+import { Camera } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import { PhotoPoint, KmlLayer, SensorConfig, DEFAULT_SENSOR } from "@/types/photo";
@@ -156,5 +157,4 @@ const Index = () => {
   );
 };
 
-import { Camera } from "lucide-react";
 export default Index;
