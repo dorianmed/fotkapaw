@@ -1,6 +1,39 @@
 import { PhotoPoint, SensorConfig } from "@/types/photo";
 
 /**
+ * Próbuje oszacować wymiary sensora (mm) na podstawie danych EXIF.
+ * Jeśli brakuje danych, zwraca wartości z domyślnego sensora.
+ */
+export function estimateSensorDimensions(exif: any, defaultSensor: SensorConfig) {
+  const widthPx = exif.ExifImageWidth || exif.PixelXDimension;
+  const heightPx = exif.ExifImageHeight || exif.PixelYDimension;
+  const focal35 = exif.FocalLengthIn35mmFormat;
+  const focalReal = exif.FocalLength;
+
+  if (focal35 && focalReal && widthPx && heightPx) {
+    // Obliczamy Crop Factor
+    const cropFactor = focal35 / focalReal;
+    // Pełna klatka to ok. 36mm szerokości. 
+    // Szacujemy szerokość sensora: 36 / cropFactor
+    const estimatedWidth = 36 / cropFactor;
+    const aspectRatio = widthPx / heightPx;
+    return {
+      width: estimatedWidth,
+      height: estimatedWidth / aspectRatio,
+      focal: focalReal,
+      resX: widthPx
+    };
+  }
+
+  return {
+    width: defaultSensor.sensorWidth,
+    height: defaultSensor.sensorHeight,
+    focal: focalReal || defaultSensor.focalLength,
+    resX: widthPx || defaultSensor.resolutionX
+  };
+}
+
+/**
  * Calculate ground footprint dimensions at a given altitude.
  */
 export function calcFootprint(sensor: SensorConfig, altitudeAGL?: number) {
