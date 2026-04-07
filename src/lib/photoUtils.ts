@@ -5,16 +5,16 @@ import { PhotoPoint, SensorConfig } from "@/types/photo";
  * Jeśli brakuje danych, zwraca wartości z domyślnego sensora.
  */
 export function estimateSensorDimensions(exif: any, defaultSensor: SensorConfig) {
-  const widthPx = exif.ExifImageWidth || exif.PixelXDimension;
-  const heightPx = exif.ExifImageHeight || exif.PixelYDimension;
+  // Próbujemy wyciągnąć rozdzielczość (różne aparaty różnie to nazywają)
+  const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || 4000;
+  const heightPx = exif.ExifImageHeight || exif.PixelYDimension || exif.ImageHeight || 3000;
+  
   const focal35 = exif.FocalLengthIn35mmFormat;
   const focalReal = exif.FocalLength;
 
-  if (focal35 && focalReal && widthPx && heightPx) {
-    // Obliczamy Crop Factor
+  // Jeśli mamy obie ogniskowe, możemy policzyć Crop Factor i rozmiar matrycy
+  if (focal35 && focalReal && focalReal > 0) {
     const cropFactor = focal35 / focalReal;
-    // Pełna klatka to ok. 36mm szerokości. 
-    // Szacujemy szerokość sensora: 36 / cropFactor
     const estimatedWidth = 36 / cropFactor;
     const aspectRatio = widthPx / heightPx;
     return {
@@ -25,6 +25,14 @@ export function estimateSensorDimensions(exif: any, defaultSensor: SensorConfig)
     };
   }
 
+  // Jeśli nie, wracamy do bezpiecznych domyślnych danych
+  return {
+    width: defaultSensor.sensorWidth,
+    height: defaultSensor.sensorHeight,
+    focal: focalReal || defaultSensor.focalLength || 24,
+    resX: widthPx
+  };
+}
   return {
     width: defaultSensor.sensorWidth,
     height: defaultSensor.sensorHeight,
