@@ -36,7 +36,15 @@ const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLa
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current).setView([52.0, 19.0], 6);
     mapRef.current = map;
+
+    const handleZoom = (e: Event) => {
+      const bounds = (e as CustomEvent).detail.bounds;
+      map.fitBounds(bounds, { padding: [50, 50] });
+    };
+    window.addEventListener("zoom-to-bounds", handleZoom);
+
     return () => {
+      window.removeEventListener("zoom-to-bounds", handleZoom);
       map.remove();
       mapRef.current = null;
     };
