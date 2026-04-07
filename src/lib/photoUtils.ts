@@ -1,7 +1,7 @@
 import { PhotoPoint, SensorConfig } from "@/types/photo";
 
 /**
- * Estymuje wymiary sensora (mm) na podstawie danych EXIF.
+ * Próbuje oszacować wymiary sensora na podstawie EXIF lub wraca do domyślnych.
  */
 export function estimateSensorDimensions(exif: any, defaultSensor: SensorConfig) {
   const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || 4000;
@@ -50,24 +50,15 @@ export function calcFootprintCorners(
 ): [number, number][] {
   const latPerMeter = 1 / 111320;
   const lngPerMeter = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
-
   const halfW = groundWidth / 2;
   const halfH = groundHeight / 2;
 
-  // x to bok poprzeczny (szerokość), y to bok wzdłużny
-  const corners = [
-    [-halfW, -halfH],
-    [halfW, -halfH],
-    [halfW, halfH],
-    [-halfW, halfH],
-  ];
-
+  const corners = [[-halfW, -halfH], [halfW, -halfH], [halfW, halfH], [-halfW, halfH]];
   const rad = (headingDeg * Math.PI) / 180;
   const cosA = Math.cos(rad);
   const sinA = Math.sin(rad);
 
   return corners.map(([x, y]) => {
-    // Rotacja prostopadła do trajektorii
     const rx = x * cosA + y * sinA;
     const ry = -x * sinA + y * cosA;
     return [lat + ry * latPerMeter, lng + rx * lngPerMeter] as [number, number];
@@ -89,31 +80,22 @@ export function calcDistance(lat1: number, lng1: number, lat2: number, lng2: num
   return Math.sqrt(dLat * dLat + dLng * dLng);
 }
 
-export function calcSpeed(p1: PhotoPoint, p2: PhotoPoint): number | undefined {
-  if (!p1.timestamp || !p2.timestamp) return undefined;
-  const dt = Math.abs(p2.timestamp.getTime() - p1.timestamp.getTime()) / 1000;
-  if (dt === 0) return undefined;
-  return calcDistance(p1.lat, p1.lng, p2.lat, p2.lng) / dt;
-}
-
 export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
   if (photos.length < 2) return photos;
   const sorted = [...photos].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0));
 
   return sorted.map((photo, i) => {
-    // Aproksymacja linii lotu (patrzymy 3 klatki w przód dla stabilności)
     const nextIdx = Math.min(i + 3, sorted.length - 1);
     const prevIdx = Math.max(i - 3, 0);
     const heading = (i < sorted.length - 1) 
       ? calcBearing(photo.lat, photo.lng, sorted[nextIdx].lat, sorted[nextIdx].lng)
       : calcBearing(sorted[prevIdx].lat, sorted[prevIdx].lng, photo.lat, photo.lng);
-
     return { ...photo, heading };
   });
 }
 
 export function analyzeOverlap(photos: PhotoPoint[]) {
   if (photos.length < 2) return { pairs: [], avgForward: 0, avgLateral: 0 };
-  // ... reszta logiki overlapu (uproszczona dla stabilności)
+  // Tu można przywrócić pełną logikę liczenia par, na razie zwracamy strukturę dla Sidebar
   return { pairs: [], avgForward: 0, avgLateral: 0 };
 }
