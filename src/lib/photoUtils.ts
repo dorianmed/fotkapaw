@@ -1,6 +1,70 @@
 import { PhotoPoint, SensorConfig } from "@/types/photo";
 
 /**
+ * Estymuje wymiary sensora na podstawie danych EXIF.
+ */
+export function estimateSensorDimensions(exif: any, defaultSensor: SensorConfig) {
+  const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || 4000;
+  const heightPx = exif.ExifImageHeight || exif.PixelYDimension || exif.ImageHeight || 3000;
+  const focal35 = exif.FocalLengthIn35mmFormat;
+  const focalReal = exif.FocalLength;
+
+  if (focal35 && focalReal && focalReal > 0) {
+    const cropFactor = focal35 / focalReal;
+    const estimatedWidth = 36 / cropFactor;
+    const aspectRatio = widthPx / heightPx;
+    return {
+      width: estimatedWidth,
+      height: estimatedWidth / aspectRatio,
+      focal: focalReal,
+      resX: widthPx
+    };
+  }
+
+  return {
+    width: defaultSensor.sensorWidth,
+    height: defaultSensor.sensorHeight,
+    focal: focalReal || defaultSensor.focalLength,
+    resX: widthPx
+  };
+}
+
+/**
+ * Poprawiona funkcja obliczania rogów z rotacją zgodną z ruchem wskazówek zegara (Azymut).
+ */
+export function calcFootprintCorners(
+  lat: number,
+  lng: number,
+  groundWidth: number,
+  groundHeight: number,
+  headingDeg: number = 0
+): [number, number][] {
+  const latPerMeter = 1 / 111320;
+  const lngPerMeter = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
+
+  const halfW = groundWidth / 2;
+  const halfH = groundHeight / 2;
+
+  const corners = [
+    [-halfW, -halfH],
+    [halfW, -halfH],
+    [halfW, halfH],
+    [-halfW, halfH],
+  ];
+
+  const rad = (headingDeg * Math.PI) / 180;
+  const cosA = Math.cos(rad);
+  const sinA = Math.sin(rad);
+
+  return corners.map(([x, y]) => {
+    // Rotacja dla współrzędnych geograficznych (CW)
+    const rx = x * cosA + y * sinA;
+    const ry = -x * sinA + y * cosA;
+    return [lat + ry * latPerMeter, lng + rx * lngPerMeter] as [number, number];
+  });
+}
+
+/**
  * Próbuje oszacować wymiary sensora (mm) na podstawie danych EXIF.
  * Jeśli brakuje danych, zwraca wartości z domyślnego sensora.
  */
