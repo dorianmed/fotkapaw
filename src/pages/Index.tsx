@@ -29,7 +29,6 @@ const Index = () => {
     for (const file of Array.from(files)) {
       try {
         const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true, xmp: true });
-        
         if (!exif?.latitude || !exif?.longitude) {
           noGps++;
           continue;
@@ -40,7 +39,6 @@ const Index = () => {
         const alt = exif.GPSAltitude ?? sensor.flightAltitude;
         const { groundWidth, groundHeight } = calcFootprint(currentSensor, alt);
         
-        // Dłuższy bok zawsze poprzecznie (Width)
         const longSide = Math.max(groundWidth, groundHeight);
         const shortSide = Math.min(groundWidth, groundHeight);
 
@@ -58,7 +56,6 @@ const Index = () => {
           thumbnailUrl: loadThumbnails ? URL.createObjectURL(file) : undefined,
         });
       } catch (e) {
-        console.error("Błąd pliku:", file.name, e);
         noGps++;
       }
     }
@@ -86,9 +83,47 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background relative" onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files; if(f.length) f[0].name.match(/\.(kml|kmz)$/i) ? handleImportKml(f[0]) : handleImportPhotos(f); }} onDragOver={(e) => e.preventDefault()}>
+    <div 
+      className="flex h-screen w-screen overflow-hidden bg-background relative" 
+      onDrop={(e) => { 
+        e.preventDefault(); 
+        const f = e.dataTransfer.files; 
+        if(f.length) {
+          if (f[0].name.match(/\.(kml|kmz)$/i)) handleImportKml(f[0]);
+          else handleImportPhotos(f);
+        }
+      }} 
+      onDragOver={(e) => e.preventDefault()}
+    >
       <div className={`absolute md:relative z-20 h-full bg-background transition-transform duration-300 w-80 shadow-2xl md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-        <Sidebar photos={photos} kmlLayers={kmlLayers} sensor={sensor} showFootprints={showFootprints} showOverlapHeatmap={showOverlapHeatmap} baseLayer={baseLayer} overlapStats={overlapStats} onImportPhotos={handleImportPhotos} onImportKml={handleImportKml} onToggleFootprints={setShowFootprints} onToggleOverlap={setShowOverlapHeatmap} onBaseLayerChange={setBaseLayer} onToggleKmlLayer={(id) => setKmlLayers(ls => ls.map(l => l.id === id ? {...l, visible: !l.visible} : l))} onRemoveKmlLayer={(id) => setKmlLayers(ls => ls.filter(l => l.id !== id))} onChangeKmlColor={(id, color) => setKmlLayers(ls => ls.map(l => l.id === id ? {...l, color} : l))} onZoomToKml={(id) => { const l = kmlLayers.find(x => x.id === id); if(l) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds: L.geoJSON(l.geojson).getBounds() } })); }} onSensorChange={setSensor} onClearPhotos={() => setPhotos([])} loadThumbnails={loadThumbnails} onToggleThumbnails={setLoadThumbnails} />
+        <Sidebar 
+          photos={photos} 
+          kmlLayers={kmlLayers} 
+          sensor={sensor} 
+          showFootprints={showFootprints} 
+          showOverlapHeatmap={showOverlapHeatmap} 
+          baseLayer={baseLayer} 
+          overlapStats={overlapStats} 
+          onImportPhotos={handleImportPhotos} 
+          onImportKml={handleImportKml} 
+          onToggleFootprints={setShowFootprints} 
+          onToggleOverlap={setShowOverlapHeatmap} 
+          onBaseLayerChange={setBaseLayer} 
+          onToggleKmlLayer={(id) => setKmlLayers(ls => ls.map(l => l.id === id ? {...l, visible: !l.visible} : l))} 
+          onRemoveKmlLayer={(id) => setKmlLayers(ls => ls.filter(l => l.id !== id))} 
+          onChangeKmlColor={(id, color) => setKmlLayers(ls => ls.map(l => l.id === id ? {...l, color} : l))} 
+          onZoomToKml={(id) => { 
+            const l = kmlLayers.find(x => x.id === id); 
+            if(l) {
+              const bounds = L.geoJSON(l.geojson).getBounds();
+              if (bounds.isValid()) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
+            }
+          }} 
+          onSensorChange={setSensor} 
+          onClearPhotos={() => setPhotos([])} 
+          loadThumbnails={loadThumbnails} 
+          onToggleThumbnails={setLoadThumbnails} 
+        />
       </div>
       <div className="flex-1 relative w-full">
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute top-4 left-4 z-[1000] md:hidden bg-card text-foreground p-3 rounded-lg shadow-lg border">
