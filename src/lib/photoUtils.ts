@@ -94,27 +94,35 @@ export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
   });
 }
 
-export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]): { photo: PhotoPoint; forward: number; lateral: number }[] {
-  const results: { photo: PhotoPoint; forward: number; lateral: number }[] = [];
+export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]): { photo: PhotoPoint; forward: number; lateral: number; type: "forward" | "lateral" | "both" }[] {
+  const results: { photo: PhotoPoint; forward: number; lateral: number; type: "forward" | "lateral" | "both" }[] = [];
   for (const p of photos) {
     if (p.id === selected.id) continue;
     const dist = calcDistance(selected.lat, selected.lng, p.lat, p.lng);
     const maxReach = Math.max(selected.footprintWidth, selected.footprintHeight, p.footprintWidth, p.footprintHeight);
-    if (dist > maxReach * 1.5) continue;
+    if (dist > maxReach * 2) continue;
 
     const bearing = calcBearing(selected.lat, selected.lng, p.lat, p.lng);
     const headingDiff = Math.abs(((bearing - (selected.heading ?? 0)) + 180) % 360 - 180);
+
+    // Along-track = component along flight direction
     const alongTrack = dist * Math.cos(headingDiff * Math.PI / 180);
+    // Across-track = component perpendicular to flight direction
     const acrossTrack = dist * Math.abs(Math.sin(headingDiff * Math.PI / 180));
 
-    const avgLong = (selected.footprintHeight + p.footprintHeight) / 2;
-    const avgLat = (selected.footprintWidth + p.footprintWidth) / 2;
+    // footprintHeight = short side = along-track dimension
+    // footprintWidth = long side = across-track dimension
+    const avgAlongDim = (selected.footprintHeight + p.footprintHeight) / 2;
+    const avgAcrossDim = (selected.footprintWidth + p.footprintWidth) / 2;
 
-    const forward = Math.max(0, (1 - Math.abs(alongTrack) / avgLong) * 100);
-    const lateral = Math.max(0, (1 - acrossTrack / avgLat) * 100);
+    const forward = Math.max(0, (1 - Math.abs(alongTrack) / avgAlongDim) * 100);
+    const lateral = Math.max(0, (1 - acrossTrack / avgAcrossDim) * 100);
+
+    // Classify pair: if bearing is mostly along heading → forward pair, else → lateral pair
+    const type: "forward" | "lateral" | "both" = headingDiff < 45 || headingDiff > 135 ? "forward" : "lateral";
 
     if (forward > 0 || lateral > 0) {
-      results.push({ photo: p, forward, lateral });
+      results.push({ photo: p, forward, lateral, type });
     }
   }
   return results;
@@ -123,22 +131,23 @@ export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]
 export function analyzeOverlap(photos: PhotoPoint[]) {
   if (photos.length < 2) return { pairs: [], avgForward: 0, avgLateral: 0 };
   
-  const pairs: { id1: string; id2: string; forward: number; lateral: number }[] = [];
+  const pairs: { id1: string; id2: string; forward: number; lateral: number; type: "forward" | "lateral" | "both" }[] = [];
+  const seen = new Set<string>();
   
   for (let i = 0; i < photos.length; i++) {
     const overlaps = findOverlappingPhotos(photos[i], photos);
     for (const o of overlaps) {
-      // Avoid duplicate pairs
-      const pairKey1 = photos[i].id + '-' + o.photo.id;
-      const pairKey2 = o.photo.id + '-' + photos[i].id;
-      if (!pairs.find(p => (p.id1 + '-' + p.id2) === pairKey2)) {
-        pairs.push({ id1: photos[i].id, id2: o.photo.id, forward: o.forward, lateral: o.lateral });
-      }
+      const key = [photos[i].id, o.photo.id].sort().join("-");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ id1: photos[i].id, id2: o.photo.id, forward: o.forward, lateral: o.lateral, type: o.type });
     }
   }
   
-  const forwardPairs = pairs.filter(p => p.forward > 0);
-  const lateralPairs = pairs.filter(p => p.lateral > 0);
+  // Forward overlap: only from along-track pairs (same strip)
+  const forwardPairs = pairs.filter(p => p.type === "forward" && p.forward > 0);
+  // Lateral overlap: only from cross-track pairs (between strips)
+  const lateralPairs = pairs.filter(p => p.type === "lateral" && p.lateral > 0);
   
   const avgForward = forwardPairs.length > 0
     ? forwardPairs.reduce((s, p) => s + p.forward, 0) / forwardPairs.length
