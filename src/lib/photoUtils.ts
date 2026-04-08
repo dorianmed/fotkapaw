@@ -122,6 +122,30 @@ export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]
 
 export function analyzeOverlap(photos: PhotoPoint[]) {
   if (photos.length < 2) return { pairs: [], avgForward: 0, avgLateral: 0 };
-  // Tu można przywrócić pełną logikę liczenia par, na razie zwracamy strukturę dla Sidebar
-  return { pairs: [], avgForward: 0, avgLateral: 0 };
+  
+  const pairs: { id1: string; id2: string; forward: number; lateral: number }[] = [];
+  
+  for (let i = 0; i < photos.length; i++) {
+    const overlaps = findOverlappingPhotos(photos[i], photos);
+    for (const o of overlaps) {
+      // Avoid duplicate pairs
+      const pairKey1 = photos[i].id + '-' + o.photo.id;
+      const pairKey2 = o.photo.id + '-' + photos[i].id;
+      if (!pairs.find(p => (p.id1 + '-' + p.id2) === pairKey2)) {
+        pairs.push({ id1: photos[i].id, id2: o.photo.id, forward: o.forward, lateral: o.lateral });
+      }
+    }
+  }
+  
+  const forwardPairs = pairs.filter(p => p.forward > 0);
+  const lateralPairs = pairs.filter(p => p.lateral > 0);
+  
+  const avgForward = forwardPairs.length > 0
+    ? forwardPairs.reduce((s, p) => s + p.forward, 0) / forwardPairs.length
+    : 0;
+  const avgLateral = lateralPairs.length > 0
+    ? lateralPairs.reduce((s, p) => s + p.lateral, 0) / lateralPairs.length
+    : 0;
+  
+  return { pairs, avgForward, avgLateral };
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
@@ -17,8 +17,7 @@ const Index = () => {
   const [showFootprints, setShowFootprints] = useState(true);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
   const [baseLayer, setBaseLayer] = useState<"osm" | "google">("osm");
-  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
-  const [loadThumbnails, setLoadThumbnails] = useState(false);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
 
   const overlapStats = analyzeOverlap(photos);
 
@@ -28,14 +27,20 @@ const Index = () => {
 
     for (const file of Array.from(files)) {
       try {
-        const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true, xmp: true });
+        const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
         if (!exif?.latitude || !exif?.longitude) {
           noGps++;
           continue;
         }
 
         const est = estimateSensorDimensions(exif, sensor);
-        const currentSensor = { ...sensor, sensorWidth: est.width, sensorHeight: est.height, focalLength: est.focal, resolutionX: est.resX };
+        const currentSensor: SensorConfig = {
+          ...sensor,
+          sensorWidth: est.width,
+          sensorHeight: est.height,
+          focalLength: est.focal,
+          resolutionX: est.resX,
+        };
         const alt = exif.GPSAltitude ?? sensor.flightAltitude;
         const { groundWidth, groundHeight } = calcFootprint(currentSensor, alt);
         
@@ -53,7 +58,13 @@ const Index = () => {
           footprintHeight: shortSide,
           footprintCorners: [],
           gsd: calcGSD(currentSensor, alt),
-          thumbnailUrl: loadThumbnails ? URL.createObjectURL(file) : undefined,
+          sensorInfo: {
+            sensorWidth: est.width,
+            sensorHeight: est.height,
+            focalLength: est.focal,
+            resolutionX: est.resX,
+          },
+          thumbnailUrl: URL.createObjectURL(file),
         });
       } catch (e) {
         noGps++;
@@ -72,7 +83,7 @@ const Index = () => {
       toast.success(`Zaimportowano ${newPhotos.length} zdjęć`);
     }
     if (noGps > 0) toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
-  }, [sensor, loadThumbnails]);
+  }, [sensor]);
 
   const handleImportKml = useCallback(async (file: File) => {
     try {
@@ -80,6 +91,28 @@ const Index = () => {
       setKmlLayers(prev => [...prev, { id: `kml-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#e11d48", geojson: geojson as any }]);
       toast.success(`Dodano KML: ${file.name}`);
     } catch { toast.error("Błąd KML"); }
+  }, []);
+
+  const handlePhotoSelect = useCallback((id: string | null, ctrlKey: boolean) => {
+    if (!id) {
+      setSelectedPhotoIds([]);
+      return;
+    }
+    if (ctrlKey) {
+      setSelectedPhotoIds(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+    } else {
+      setSelectedPhotoIds(prev =>
+        prev.length === 1 && prev[0] === id ? [] : [id]
+      );
+    }
+  }, []);
+
+  const handleSearchResult = useCallback((lat: number, lng: number, _label: string) => {
+    window.dispatchEvent(new CustomEvent("zoom-to-bounds", {
+      detail: { bounds: L.latLngBounds([[lat - 0.01, lng - 0.01], [lat + 0.01, lng + 0.01]]) }
+    }));
   }, []);
 
   return (
@@ -121,15 +154,22 @@ const Index = () => {
           }} 
           onSensorChange={setSensor} 
           onClearPhotos={() => setPhotos([])} 
-          loadThumbnails={loadThumbnails} 
-          onToggleThumbnails={setLoadThumbnails} 
+          onSearchResult={handleSearchResult}
         />
       </div>
       <div className="flex-1 relative w-full">
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute top-4 left-4 z-[1000] md:hidden bg-card text-foreground p-3 rounded-lg shadow-lg border">
           {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
-        <MapView photos={photos} kmlLayers={kmlLayers} showFootprints={showFootprints} showOverlapHeatmap={showOverlapHeatmap} baseLayer={baseLayer} selectedPhotoId={selectedPhotoId} onPhotoSelect={setSelectedPhotoId} />
+        <MapView 
+          photos={photos} 
+          kmlLayers={kmlLayers} 
+          showFootprints={showFootprints} 
+          showOverlapHeatmap={showOverlapHeatmap} 
+          baseLayer={baseLayer} 
+          selectedPhotoIds={selectedPhotoIds} 
+          onPhotoSelect={handlePhotoSelect} 
+        />
         {!photos.length && !kmlLayers.length && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="bg-card/90 backdrop-blur rounded-lg p-8 text-center shadow-lg border max-w-md mx-4">
