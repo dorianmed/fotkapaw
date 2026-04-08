@@ -142,12 +142,18 @@ const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLa
       }
 
       const marker = L.marker([photo.lat, photo.lng], { icon: cameraIcon })
-        .bindPopup(popupContent)
+        .bindPopup(popupContent, { autoPan: false })
         .addTo(photoGroup);
 
+      // Prevent default popup-on-click so ctrl+click works for multi-select
+      marker.off("click");
       marker.on("click", (e) => {
         const ctrlKey = (e.originalEvent as MouseEvent).ctrlKey || (e.originalEvent as MouseEvent).metaKey;
         onPhotoSelect?.(photo.id, ctrlKey);
+        // Only open popup if not ctrl-clicking (single select)
+        if (!ctrlKey) {
+          marker.openPopup();
+        }
       });
 
       // Draw footprint
