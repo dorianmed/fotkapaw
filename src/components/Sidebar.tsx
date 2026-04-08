@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { PhotoPoint, KmlLayer, SensorConfig } from "@/types/photo";
-import { Camera, Map, Layers, BarChart3, Upload, Eye, EyeOff, Trash2, ZoomIn, Palette } from "lucide-react";
+import { Camera, Map, Layers, BarChart3, Upload, Eye, EyeOff, Trash2, ZoomIn } from "lucide-react";
+import SearchBar from "@/components/SearchBar";
 
 interface SidebarProps {
   photos: PhotoPoint[];
@@ -28,8 +29,7 @@ interface SidebarProps {
   onZoomToKml: (id: string) => void;
   onSensorChange: (s: SensorConfig) => void;
   onClearPhotos: () => void;
-  loadThumbnails: boolean;
-  onToggleThumbnails: (v: boolean) => void;
+  onSearchResult: (lat: number, lng: number, label: string) => void;
 }
 
 const Sidebar = ({
@@ -38,8 +38,7 @@ const Sidebar = ({
   onImportPhotos, onImportKml,
   onToggleFootprints, onToggleOverlap, onBaseLayerChange,
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onZoomToKml,
-  onSensorChange, onClearPhotos,
-  loadThumbnails, onToggleThumbnails,
+  onSensorChange, onClearPhotos, onSearchResult,
 }: SidebarProps) => {
   const [showSensorSettings, setShowSensorSettings] = useState(false);
 
@@ -61,6 +60,8 @@ const Sidebar = ({
         <Camera className="h-5 w-5 text-primary" />
         <h1 className="text-lg font-bold text-foreground">Analiza Nalotu</h1>
       </div>
+
+      <SearchBar onResult={onSearchResult} />
 
       <Separator />
 
@@ -84,10 +85,6 @@ const Sidebar = ({
               <span><Upload className="h-4 w-4 mr-2" /> Wybierz zdjęcia</span>
             </Button>
           </label>
-          <div className="flex items-center justify-between">
-            <Label className="text-xs text-foreground">Wczytaj miniaturki</Label>
-            <Switch checked={loadThumbnails} onCheckedChange={onToggleThumbnails} />
-          </div>
           {photos.length > 0 && (
             <div className="flex items-center justify-between">
               <Badge variant="secondary">{photos.length} zdjęć</Badge>
@@ -189,7 +186,7 @@ const Sidebar = ({
             <Label className="text-xs text-foreground">Pokrycie (heatmapa)</Label>
             <Switch checked={showOverlapHeatmap} onCheckedChange={onToggleOverlap} />
           </div>
-          <p className="text-xs text-muted-foreground">💡 Kliknij zdjęcie na mapie, aby zobaczyć jego pokrycie z sąsiednimi</p>
+          <p className="text-xs text-muted-foreground">💡 Kliknij zdjęcie na mapie aby zobaczyć pokrycie. Ctrl+klik = multi-select</p>
         </CardContent>
       </Card>
 
@@ -235,10 +232,18 @@ const Sidebar = ({
             )}
             <Separator />
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>Sensor: {sensor.sensorWidth}×{sensor.sensorHeight} mm</p>
+              <p>Sensor (domyślny): {sensor.sensorWidth}×{sensor.sensorHeight} mm</p>
               <p>Ogniskowa: {sensor.focalLength} mm</p>
               <p>Pułap: {sensor.flightAltitude} m AGL</p>
-              <p>Zasięg: {((sensor.sensorWidth / sensor.focalLength) * sensor.flightAltitude).toFixed(1)}m × {((sensor.sensorHeight / sensor.focalLength) * sensor.flightAltitude).toFixed(1)}m</p>
+              {photos[0]?.sensorInfo && (
+                <>
+                  <Separator />
+                  <p className="text-primary font-medium">Z EXIF (1. zdjęcie):</p>
+                  <p>Sensor: {photos[0].sensorInfo.sensorWidth.toFixed(2)}×{photos[0].sensorInfo.sensorHeight.toFixed(2)} mm</p>
+                  <p>Ogniskowa: {photos[0].sensorInfo.focalLength.toFixed(1)} mm</p>
+                  <p>Rozdzielczość: {photos[0].sensorInfo.resolutionX} px</p>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -251,11 +256,12 @@ const Sidebar = ({
         className="w-full text-xs"
         onClick={() => setShowSensorSettings(!showSensorSettings)}
       >
-        {showSensorSettings ? "Ukryj" : "Pokaż"} ustawienia sensora
+        {showSensorSettings ? "Ukryj" : "Pokaż"} ustawienia sensora (domyślne)
       </Button>
       {showSensorSettings && (
         <Card>
           <CardContent className="p-4 space-y-2 text-sm">
+            <p className="text-xs text-muted-foreground">Używane gdy EXIF nie zawiera danych sensora</p>
             {[
               { label: "Sensor szer. (mm)", key: "sensorWidth" as const },
               { label: "Sensor wys. (mm)", key: "sensorHeight" as const },
