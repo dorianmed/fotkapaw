@@ -14,6 +14,13 @@ export interface PhotoPoint {
   // Footprint corners [lat, lng][]
   footprintCorners: [number, number][];
   gsd?: number; // ground sample distance in cm/px
+  // Per-photo sensor info from EXIF
+  sensorInfo?: {
+    sensorWidth: number;
+    sensorHeight: number;
+    focalLength: number;
+    resolutionX: number;
+  };
 }
 
 export interface KmlLayer {

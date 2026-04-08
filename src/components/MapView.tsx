@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { PhotoPoint, KmlLayer } from "@/types/photo";
 import { findOverlappingPhotos } from "@/lib/photoUtils";
 
-// Fix default marker icon
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -22,14 +21,15 @@ interface MapViewProps {
   showFootprints: boolean;
   showOverlapHeatmap: boolean;
   baseLayer: "osm" | "google";
-  selectedPhotoId?: string | null;
-  onPhotoSelect?: (id: string | null) => void;
+  selectedPhotoIds?: string[];
+  onPhotoSelect?: (id: string | null, ctrlKey: boolean) => void;
 }
 
-const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLayer, selectedPhotoId, onPhotoSelect }: MapViewProps) => {
+const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLayer, selectedPhotoIds = [], onPhotoSelect }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const layersRef = useRef<L.LayerGroup[]>([]);
+  const fitDoneRef = useRef(false);
 
   // Initialize map
   useEffect(() => {
@@ -78,18 +78,34 @@ const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLa
     layersRef.current.forEach((lg) => map.removeLayer(lg));
     layersRef.current = [];
 
-    if (photos.length === 0) return;
+    if (photos.length === 0) {
+      fitDoneRef.current = false;
+      return;
+    }
 
     const photoGroup = L.layerGroup().addTo(map);
     layersRef.current.push(photoGroup);
 
-    const selectedPhoto = selectedPhotoId ? photos.find(p => p.id === selectedPhotoId) : null;
-    const overlapping = selectedPhoto ? findOverlappingPhotos(selectedPhoto, photos) : [];
-    const overlappingIds = new Set(overlapping.map(o => o.photo.id));
+    const selectedSet = new Set(selectedPhotoIds);
+    
+    // Find overlapping photos for all selected
+    const allOverlapping = new Map<string, { forward: number; lateral: number }>();
+    for (const selId of selectedPhotoIds) {
+      const selPhoto = photos.find(p => p.id === selId);
+      if (!selPhoto) continue;
+      const overlaps = findOverlappingPhotos(selPhoto, photos);
+      for (const o of overlaps) {
+        const existing = allOverlapping.get(o.photo.id);
+        if (!existing || o.forward + o.lateral > existing.forward + existing.lateral) {
+          allOverlapping.set(o.photo.id, { forward: o.forward, lateral: o.lateral });
+        }
+      }
+    }
 
     photos.forEach((photo) => {
-      const isSelected = photo.id === selectedPhotoId;
-      const isOverlapping = overlappingIds.has(photo.id);
+      const isSelected = selectedSet.has(photo.id);
+      const overlapInfo = allOverlapping.get(photo.id);
+      const isOverlapping = !!overlapInfo;
       
       const bgColor = isSelected
         ? "hsl(210, 100%, 50%)"
@@ -105,10 +121,6 @@ const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLa
         className: "",
       });
 
-      const overlapInfo = isOverlapping
-        ? overlapping.find(o => o.photo.id === photo.id)
-        : null;
-
       let popupContent = `<b>${photo.filename}</b><br/>` +
         `Lat: ${photo.lat.toFixed(6)}<br/>` +
         `Lng: ${photo.lng.toFixed(6)}<br/>` +
@@ -118,9 +130,12 @@ const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLa
       if (photo.speed !== undefined) popupContent += `<br/>Prędkość: ${photo.speed.toFixed(1)} m/s`;
       if (photo.gsd !== undefined) popupContent += `<br/>GSD: ${photo.gsd.toFixed(2)} cm/px`;
       if (photo.heading !== undefined) popupContent += `<br/>Kurs: ${photo.heading.toFixed(1)}°`;
+      if (photo.sensorInfo) {
+        popupContent += `<br/><span style="color:#888">Sensor: ${photo.sensorInfo.sensorWidth.toFixed(1)}×${photo.sensorInfo.sensorHeight.toFixed(1)}mm, f=${photo.sensorInfo.focalLength.toFixed(1)}mm</span>`;
+      }
       if (overlapInfo) {
-        if (overlapInfo.forward > 0) popupContent += `<br/>Pokrycie podłużne: ${overlapInfo.forward.toFixed(1)}%`;
-        if (overlapInfo.lateral > 0) popupContent += `<br/>Pokrycie poprzeczne: ${overlapInfo.lateral.toFixed(1)}%`;
+        if (overlapInfo.forward > 0) popupContent += `<br/><b>Pokrycie podłużne: ${overlapInfo.forward.toFixed(1)}%</b>`;
+        if (overlapInfo.lateral > 0) popupContent += `<br/><b>Pokrycie poprzeczne: ${overlapInfo.lateral.toFixed(1)}%</b>`;
       }
       if (photo.thumbnailUrl) {
         popupContent += `<br/><img src="${photo.thumbnailUrl}" style="max-width:200px;max-height:150px;margin-top:4px;border-radius:4px"/>`;
@@ -130,8 +145,9 @@ const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLa
         .bindPopup(popupContent)
         .addTo(photoGroup);
 
-      marker.on("click", () => {
-        onPhotoSelect?.(isSelected ? null : photo.id);
+      marker.on("click", (e) => {
+        const ctrlKey = (e.originalEvent as MouseEvent).ctrlKey || (e.originalEvent as MouseEvent).metaKey;
+        onPhotoSelect?.(photo.id, ctrlKey);
       });
 
       // Draw footprint
@@ -206,11 +222,14 @@ const MapView = ({ photos, kmlLayers, showFootprints, showOverlapHeatmap, baseLa
     }
 
     // Fit bounds only on first load
-    const allPoints = photos.map((p) => [p.lat, p.lng] as [number, number]);
-    if (allPoints.length > 0 && !selectedPhotoId) {
-      map.fitBounds(L.latLngBounds(allPoints), { padding: [50, 50] });
+    if (!fitDoneRef.current) {
+      const allPoints = photos.map((p) => [p.lat, p.lng] as [number, number]);
+      if (allPoints.length > 0) {
+        map.fitBounds(L.latLngBounds(allPoints), { padding: [50, 50] });
+        fitDoneRef.current = true;
+      }
     }
-  }, [photos, showFootprints, showOverlapHeatmap, selectedPhotoId, onPhotoSelect]);
+  }, [photos, showFootprints, showOverlapHeatmap, selectedPhotoIds, onPhotoSelect]);
 
   // KML layers
   useEffect(() => {
