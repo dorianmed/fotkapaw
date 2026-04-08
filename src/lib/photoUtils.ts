@@ -94,6 +94,32 @@ export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
   });
 }
 
+export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]): { photo: PhotoPoint; forward: number; lateral: number }[] {
+  const results: { photo: PhotoPoint; forward: number; lateral: number }[] = [];
+  for (const p of photos) {
+    if (p.id === selected.id) continue;
+    const dist = calcDistance(selected.lat, selected.lng, p.lat, p.lng);
+    const maxReach = Math.max(selected.footprintWidth, selected.footprintHeight, p.footprintWidth, p.footprintHeight);
+    if (dist > maxReach * 1.5) continue;
+
+    const bearing = calcBearing(selected.lat, selected.lng, p.lat, p.lng);
+    const headingDiff = Math.abs(((bearing - (selected.heading ?? 0)) + 180) % 360 - 180);
+    const alongTrack = dist * Math.cos(headingDiff * Math.PI / 180);
+    const acrossTrack = dist * Math.abs(Math.sin(headingDiff * Math.PI / 180));
+
+    const avgLong = (selected.footprintHeight + p.footprintHeight) / 2;
+    const avgLat = (selected.footprintWidth + p.footprintWidth) / 2;
+
+    const forward = Math.max(0, (1 - Math.abs(alongTrack) / avgLong) * 100);
+    const lateral = Math.max(0, (1 - acrossTrack / avgLat) * 100);
+
+    if (forward > 0 || lateral > 0) {
+      results.push({ photo: p, forward, lateral });
+    }
+  }
+  return results;
+}
+
 export function analyzeOverlap(photos: PhotoPoint[]) {
   if (photos.length < 2) return { pairs: [], avgForward: 0, avgLateral: 0 };
   // Tu można przywrócić pełną logikę liczenia par, na razie zwracamy strukturę dla Sidebar
