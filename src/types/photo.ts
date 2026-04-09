@@ -20,6 +20,7 @@ export interface PhotoPoint {
     sensorHeight: number;
     focalLength: number;
     resolutionX: number;
+    source?: "exif" | "estimated" | "fallback";
   };
 }
 
@@ -38,6 +39,30 @@ export interface SensorConfig {
   sensorHeight: number; // mm
   focalLength: number;  // mm
   flightAltitude: number; // meters AGL
+}
+
+export interface OverlapPair {
+  id1: string;
+  id2: string;
+  forward: number;
+  lateral: number;
+  type: "forward" | "lateral" | "both";
+  alongTrack: number;
+  acrossTrack: number;
+}
+
+export interface OverlapStats {
+  pairs: OverlapPair[];
+  avgForward: number;
+  avgLateral: number;
+}
+
+export type MeasureMode = "none" | "distance" | "area";
+
+export interface MeasurementSummary {
+  distanceMeters: number;
+  areaSquareMeters: number;
+  pointCount: number;
 }
 
 export const DEFAULT_SENSOR: SensorConfig = {
