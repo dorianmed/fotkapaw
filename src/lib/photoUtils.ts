@@ -1,9 +1,9 @@
-import { PhotoPoint, SensorConfig } from "@/types/photo";
+import { OverlapPair, OverlapStats, PhotoPoint, SensorConfig } from "@/types/photo";
 
 /**
  * Próbuje oszacować wymiary sensora na podstawie EXIF lub wraca do domyślnych.
  */
-export function estimateSensorDimensions(exif: any, defaultSensor: SensorConfig) {
+export function estimateSensorDimensions(exif: any, fallbackAltitudeConfig: SensorConfig) {
   const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || 4000;
   const heightPx = exif.ExifImageHeight || exif.PixelYDimension || exif.ImageHeight || 3000;
   const focal35 = exif.FocalLengthIn35mmFormat;
@@ -17,15 +17,29 @@ export function estimateSensorDimensions(exif: any, defaultSensor: SensorConfig)
       width: estimatedWidth,
       height: estimatedWidth / aspectRatio,
       focal: focalReal,
-      resX: widthPx
+      resX: widthPx,
+      source: "estimated" as const
+    };
+  }
+
+  const exifSensorWidth = exif.SensorWidth || exif.sensorWidth;
+  const exifSensorHeight = exif.SensorHeight || exif.sensorHeight;
+  if (exifSensorWidth && exifSensorHeight && focalReal && focalReal > 0) {
+    return {
+      width: exifSensorWidth,
+      height: exifSensorHeight,
+      focal: focalReal,
+      resX: widthPx,
+      source: "exif" as const
     };
   }
 
   return {
-    width: defaultSensor.sensorWidth,
-    height: defaultSensor.sensorHeight,
-    focal: focalReal || defaultSensor.focalLength,
-    resX: widthPx
+    width: fallbackAltitudeConfig.sensorWidth,
+    height: fallbackAltitudeConfig.sensorHeight,
+    focal: focalReal || fallbackAltitudeConfig.focalLength,
+    resX: widthPx,
+    source: "fallback" as const
   };
 }
 
@@ -80,6 +94,25 @@ export function calcDistance(lat1: number, lng1: number, lat2: number, lng2: num
   return Math.sqrt(dLat * dLat + dLng * dLng);
 }
 
+export function projectPhotoOffsetMeters(origin: PhotoPoint, target: PhotoPoint) {
+  const dist = calcDistance(origin.lat, origin.lng, target.lat, target.lng);
+  const bearing = calcBearing(origin.lat, origin.lng, target.lat, target.lng);
+  const headingDiff = (((bearing - (origin.heading ?? 0)) + 540) % 360) - 180;
+  const radians = (headingDiff * Math.PI) / 180;
+
+  return {
+    distance: dist,
+    headingDiff: Math.abs(headingDiff),
+    alongTrack: dist * Math.cos(radians),
+    acrossTrack: dist * Math.sin(radians),
+  };
+}
+
+function calcAxisOverlapPercent(shift: number, dimension: number) {
+  if (dimension <= 0) return 0;
+  return Math.max(0, (1 - Math.abs(shift) / dimension) * 100);
+}
+
 export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
   if (photos.length < 2) return photos;
   const sorted = [...photos].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0));
@@ -94,44 +127,33 @@ export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
   });
 }
 
-export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]): { photo: PhotoPoint; forward: number; lateral: number; type: "forward" | "lateral" | "both" }[] {
-  const results: { photo: PhotoPoint; forward: number; lateral: number; type: "forward" | "lateral" | "both" }[] = [];
+export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]): { photo: PhotoPoint; forward: number; lateral: number; type: "forward" | "lateral" | "both"; alongTrack: number; acrossTrack: number }[] {
+  const results: { photo: PhotoPoint; forward: number; lateral: number; type: "forward" | "lateral" | "both"; alongTrack: number; acrossTrack: number }[] = [];
   for (const p of photos) {
     if (p.id === selected.id) continue;
-    const dist = calcDistance(selected.lat, selected.lng, p.lat, p.lng);
+    const { distance, headingDiff, alongTrack, acrossTrack } = projectPhotoOffsetMeters(selected, p);
     const maxReach = Math.max(selected.footprintWidth, selected.footprintHeight, p.footprintWidth, p.footprintHeight);
-    if (dist > maxReach * 2) continue;
+    if (distance > maxReach * 2) continue;
 
-    const bearing = calcBearing(selected.lat, selected.lng, p.lat, p.lng);
-    const headingDiff = Math.abs(((bearing - (selected.heading ?? 0)) + 180) % 360 - 180);
-
-    // Along-track = component along flight direction
-    const alongTrack = dist * Math.cos(headingDiff * Math.PI / 180);
-    // Across-track = component perpendicular to flight direction
-    const acrossTrack = dist * Math.abs(Math.sin(headingDiff * Math.PI / 180));
-
-    // footprintHeight = short side = along-track dimension
-    // footprintWidth = long side = across-track dimension
     const avgAlongDim = (selected.footprintHeight + p.footprintHeight) / 2;
     const avgAcrossDim = (selected.footprintWidth + p.footprintWidth) / 2;
 
-    const forward = Math.max(0, (1 - Math.abs(alongTrack) / avgAlongDim) * 100);
-    const lateral = Math.max(0, (1 - acrossTrack / avgAcrossDim) * 100);
+    const forward = calcAxisOverlapPercent(alongTrack, avgAlongDim);
+    const lateral = calcAxisOverlapPercent(acrossTrack, avgAcrossDim);
 
-    // Classify pair: if bearing is mostly along heading → forward pair, else → lateral pair
     const type: "forward" | "lateral" | "both" = headingDiff < 45 || headingDiff > 135 ? "forward" : "lateral";
 
     if (forward > 0 || lateral > 0) {
-      results.push({ photo: p, forward, lateral, type });
+      results.push({ photo: p, forward, lateral, type, alongTrack, acrossTrack: Math.abs(acrossTrack) });
     }
   }
   return results;
 }
 
-export function analyzeOverlap(photos: PhotoPoint[]) {
+export function analyzeOverlap(photos: PhotoPoint[]): OverlapStats {
   if (photos.length < 2) return { pairs: [], avgForward: 0, avgLateral: 0 };
   
-  const pairs: { id1: string; id2: string; forward: number; lateral: number; type: "forward" | "lateral" | "both" }[] = [];
+  const pairs: OverlapPair[] = [];
   const seen = new Set<string>();
   
   for (let i = 0; i < photos.length; i++) {
@@ -140,7 +162,7 @@ export function analyzeOverlap(photos: PhotoPoint[]) {
       const key = [photos[i].id, o.photo.id].sort().join("-");
       if (seen.has(key)) continue;
       seen.add(key);
-      pairs.push({ id1: photos[i].id, id2: o.photo.id, forward: o.forward, lateral: o.lateral, type: o.type });
+      pairs.push({ id1: photos[i].id, id2: o.photo.id, forward: o.forward, lateral: o.lateral, type: o.type, alongTrack: Math.abs(o.alongTrack), acrossTrack: Math.abs(o.acrossTrack) });
     }
   }
   
