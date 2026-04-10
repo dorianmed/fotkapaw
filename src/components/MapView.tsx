@@ -28,6 +28,7 @@ interface MapViewProps {
   measureMode: MeasureMode;
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
+  onMapClick?: (lat: number, lng: number) => void;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
@@ -48,6 +49,7 @@ const MapView = ({
   measureMode,
   measurementResetSignal,
   onMeasurementChange,
+  onMapClick,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
