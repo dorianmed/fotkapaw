@@ -140,6 +140,7 @@ const MapView = ({
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
+      onMapClickRef.current?.(event.latlng.lat, event.latlng.lng);
       if (measureModeRef.current === "none") return;
       addMeasurementPoint(event.latlng.lat, event.latlng.lng);
     };
@@ -157,8 +158,9 @@ const MapView = ({
 
   useEffect(() => {
     measureModeRef.current = measureMode;
+    onMapClickRef.current = onMapClick;
     snapTargetsRef.current = createPhotoSnapTargets(photos);
-  }, [measureMode, photos]);
+  }, [measureMode, onMapClick, photos]);
 
   useEffect(() => {
     resetMeasurement();
