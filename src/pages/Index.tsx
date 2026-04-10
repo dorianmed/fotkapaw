@@ -9,6 +9,8 @@ import { DEFAULT_FOOTPRINT_STYLE, DEFAULT_SENSOR, FootprintStyle, KmlLayer, Meas
 import { analyzeOverlap, assignHeadings, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -24,6 +26,8 @@ const Index = () => {
   const [measurement, setMeasurement] = useState<MeasurementSummary | null>(null);
   const [measurementResetSignal, setMeasurementResetSignal] = useState(0);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
 
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
@@ -256,7 +260,34 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
+          onMapClick={(lat, lng) => setClickedCoords({ lat, lng })}
         />
+
+        {/* Coordinate display */}
+        {clickedCoords && (() => {
+          const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
+          return (
+            <div className="absolute bottom-4 left-4 z-[1000] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground">
+              <div className="flex items-center gap-2 mb-1">
+                <Select value={coordSystem} onValueChange={(v) => setCoordSystem(v as CoordinateSystem)}>
+                  <SelectTrigger className="h-6 w-[130px] text-xs border-muted">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COORDINATE_SYSTEMS.map((cs) => (
+                      <SelectItem key={cs.value} value={cs.value} className="text-xs">{cs.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button onClick={() => setClickedCoords(null)} className="text-muted-foreground hover:text-foreground ml-1">✕</button>
+              </div>
+              <div className="font-mono leading-relaxed">
+                <div>{coords.line1}</div>
+                <div>{coords.line2}</div>
+              </div>
+            </div>
+          );
+        })()}
 
         {!photos.length && !kmlLayers.length && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

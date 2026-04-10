@@ -28,6 +28,7 @@ interface MapViewProps {
   measureMode: MeasureMode;
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
+  onMapClick?: (lat: number, lng: number) => void;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
@@ -48,6 +49,7 @@ const MapView = ({
   measureMode,
   measurementResetSignal,
   onMeasurementChange,
+  onMapClick,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +58,7 @@ const MapView = ({
   const measurementLayerRef = useRef<L.LayerGroup | null>(null);
   const measurementPointsRef = useRef<[number, number][]>([]);
   const measureModeRef = useRef<MeasureMode>(measureMode);
+  const onMapClickRef = useRef(onMapClick);
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
 
   const redrawMeasurement = () => {
@@ -137,6 +140,7 @@ const MapView = ({
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
+      onMapClickRef.current?.(event.latlng.lat, event.latlng.lng);
       if (measureModeRef.current === "none") return;
       addMeasurementPoint(event.latlng.lat, event.latlng.lng);
     };
@@ -154,8 +158,9 @@ const MapView = ({
 
   useEffect(() => {
     measureModeRef.current = measureMode;
+    onMapClickRef.current = onMapClick;
     snapTargetsRef.current = createPhotoSnapTargets(photos);
-  }, [measureMode, photos]);
+  }, [measureMode, onMapClick, photos]);
 
   useEffect(() => {
     resetMeasurement();
