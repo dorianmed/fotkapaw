@@ -26,6 +26,8 @@ const Index = () => {
   const [measurement, setMeasurement] = useState<MeasurementSummary | null>(null);
   const [measurementResetSignal, setMeasurementResetSignal] = useState(0);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
 
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
