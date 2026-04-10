@@ -9,6 +9,8 @@ import { DEFAULT_FOOTPRINT_STYLE, DEFAULT_SENSOR, FootprintStyle, KmlLayer, Meas
 import { analyzeOverlap, assignHeadings, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
