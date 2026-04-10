@@ -5,16 +5,13 @@ export interface PhotoPoint {
   lng: number;
   altitude?: number;
   timestamp?: Date;
-  heading?: number; // flight heading in degrees
-  speed?: number; // m/s
+  heading?: number;
+  speed?: number;
   thumbnailUrl?: string;
-  // Ground footprint in meters
   footprintWidth: number;
   footprintHeight: number;
-  // Footprint corners [lat, lng][]
   footprintCorners: [number, number][];
-  gsd?: number; // ground sample distance in cm/px
-  // Per-photo sensor info from EXIF
+  gsd?: number;
   sensorInfo?: {
     sensorWidth: number;
     sensorHeight: number;
@@ -29,16 +26,23 @@ export interface KmlLayer {
   name: string;
   visible: boolean;
   color: string;
+  weight: number;
   geojson: GeoJSON.FeatureCollection;
+}
+
+export interface FootprintStyle {
+  color: string;
+  fillOpacity: number;
+  outlineOnly: boolean;
 }
 
 export interface SensorConfig {
   resolutionX: number;
   resolutionY: number;
-  sensorWidth: number;  // mm
-  sensorHeight: number; // mm
-  focalLength: number;  // mm
-  flightAltitude: number; // meters AGL
+  sensorWidth: number;
+  sensorHeight: number;
+  focalLength: number;
+  flightAltitude: number;
 }
 
 export interface OverlapPair {
@@ -72,4 +76,10 @@ export const DEFAULT_SENSOR: SensorConfig = {
   sensorHeight: 3.6,
   focalLength: 5.4,
   flightAltitude: 120,
+};
+
+export const DEFAULT_FOOTPRINT_STYLE: FootprintStyle = {
+  color: "#1e3a5f",
+  fillOpacity: 0.1,
+  outlineOnly: false,
 };

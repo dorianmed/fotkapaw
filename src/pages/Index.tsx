@@ -5,9 +5,10 @@ import L from "leaflet";
 import { Camera, Menu, X } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
-import { DEFAULT_SENSOR, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
+import { DEFAULT_FOOTPRINT_STYLE, DEFAULT_SENSOR, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
 import { analyzeOverlap, assignHeadings, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -15,12 +16,14 @@ const Index = () => {
   const [kmlLayers, setKmlLayers] = useState<KmlLayer[]>([]);
   const [sensor, setSensor] = useState<SensorConfig>(DEFAULT_SENSOR);
   const [showFootprints, setShowFootprints] = useState(true);
+  const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
   const [baseLayer, setBaseLayer] = useState<"osm" | "google">("osm");
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [measureMode, setMeasureMode] = useState<MeasureMode>("none");
   const [measurement, setMeasurement] = useState<MeasurementSummary | null>(null);
   const [measurementResetSignal, setMeasurementResetSignal] = useState(0);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
 
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
@@ -33,12 +36,17 @@ const Index = () => {
     const newPhotos: PhotoPoint[] = [];
     let noGps = 0;
     const fallbackSensor: SensorConfig = { ...DEFAULT_SENSOR, flightAltitude: sensor.flightAltitude };
+    const total = files.length;
 
-    for (const file of Array.from(files)) {
+    setImportProgress({ current: 0, total });
+
+    for (let i = 0; i < total; i++) {
+      const file = files[i];
       try {
         const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
         if (!exif?.latitude || !exif?.longitude) {
           noGps++;
+          setImportProgress({ current: i + 1, total });
           continue;
         }
 
@@ -80,6 +88,7 @@ const Index = () => {
       } catch {
         noGps++;
       }
+      setImportProgress({ current: i + 1, total });
     }
 
     if (newPhotos.length > 0) {
@@ -97,6 +106,8 @@ const Index = () => {
     if (noGps > 0) {
       toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
     }
+
+    setImportProgress(null);
   }, [sensor.flightAltitude]);
 
   const handleImportKml = useCallback(async (file: File) => {
@@ -104,7 +115,7 @@ const Index = () => {
       const geojson = kml(new DOMParser().parseFromString(await file.text(), "text/xml"));
       setKmlLayers((prev) => [
         ...prev,
-        { id: `kml-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#e11d48", geojson: geojson as any },
+        { id: `kml-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#e11d48", weight: 2, geojson: geojson as any },
       ]);
       toast.success(`Dodano KML: ${file.name}`);
     } catch {
@@ -117,12 +128,10 @@ const Index = () => {
       setSelectedPhotoIds([]);
       return;
     }
-
     if (ctrlKey) {
       setSelectedPhotoIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
       return;
     }
-
     setSelectedPhotoIds((prev) => (prev.length === 1 && prev[0] === id ? [] : [id]));
   }, []);
 
@@ -131,6 +140,12 @@ const Index = () => {
       detail: { bounds: L.latLngBounds([[lat - 0.01, lng - 0.01], [lat + 0.01, lng + 0.01]]) },
     }));
   }, []);
+
+  const handleZoomToPhotos = useCallback(() => {
+    if (photos.length === 0) return;
+    const bounds = L.latLngBounds(photos.map((p) => [p.lat, p.lng] as [number, number]));
+    window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
+  }, [photos]);
 
   const handleMeasureModeChange = useCallback((mode: MeasureMode) => {
     setMeasureMode(mode);
@@ -158,12 +173,21 @@ const Index = () => {
       }}
       onDragOver={(event) => event.preventDefault()}
     >
-      <div className={`absolute z-20 h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      {/* Mobile overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-[1100] bg-black/40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      <div className={`fixed z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:z-auto md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
         <Sidebar
           photos={photos}
           kmlLayers={kmlLayers}
           sensor={sensor}
           showFootprints={showFootprints}
+          footprintStyle={footprintStyle}
           showOverlapHeatmap={showOverlapHeatmap}
           baseLayer={baseLayer}
           overlapStats={overlapStats}
@@ -174,11 +198,13 @@ const Index = () => {
           onImportPhotos={handleImportPhotos}
           onImportKml={handleImportKml}
           onToggleFootprints={setShowFootprints}
+          onFootprintStyleChange={setFootprintStyle}
           onToggleOverlap={setShowOverlapHeatmap}
           onBaseLayerChange={setBaseLayer}
           onToggleKmlLayer={(id) => setKmlLayers((layers) => layers.map((layer) => (layer.id === id ? { ...layer, visible: !layer.visible } : layer)))}
           onRemoveKmlLayer={(id) => setKmlLayers((layers) => layers.filter((layer) => layer.id !== id))}
           onChangeKmlColor={(id, color) => setKmlLayers((layers) => layers.map((layer) => (layer.id === id ? { ...layer, color } : layer)))}
+          onChangeKmlWeight={(id, weight) => setKmlLayers((layers) => layers.map((layer) => (layer.id === id ? { ...layer, weight } : layer)))}
           onZoomToKml={(id) => {
             const layer = kmlLayers.find((item) => item.id === id);
             if (!layer) return;
@@ -194,6 +220,7 @@ const Index = () => {
             setMeasurement(null);
             setMeasurementResetSignal((value) => value + 1);
           }}
+          onZoomToPhotos={handleZoomToPhotos}
           onSearchResult={handleSearchResult}
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
@@ -203,15 +230,25 @@ const Index = () => {
       <div className="relative flex-1 w-full">
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute left-4 top-4 z-[1000] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden"
+          className="absolute left-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden"
         >
           {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
+
+        {importProgress && (
+          <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 w-72 rounded-lg border bg-card p-3 shadow-lg">
+            <p className="text-xs text-muted-foreground mb-2">
+              Przetwarzanie zdjęć: {importProgress.current}/{importProgress.total}
+            </p>
+            <Progress value={(importProgress.current / importProgress.total) * 100} className="h-2" />
+          </div>
+        )}
 
         <MapView
           photos={photos}
           kmlLayers={kmlLayers}
           showFootprints={showFootprints}
+          footprintStyle={footprintStyle}
           showOverlapHeatmap={showOverlapHeatmap}
           baseLayer={baseLayer}
           selectedPhotoIds={selectedPhotoIds}

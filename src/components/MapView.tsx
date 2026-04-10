@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint } from "@/types/photo";
+import { FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint } from "@/types/photo";
 import { findOverlappingPhotos } from "@/lib/photoUtils";
 import { calcPolygonArea, calcPolylineDistance, createPhotoSnapTargets, findNearestSnapTarget } from "@/lib/measurementUtils";
 
@@ -20,6 +20,7 @@ interface MapViewProps {
   photos: PhotoPoint[];
   kmlLayers: KmlLayer[];
   showFootprints: boolean;
+  footprintStyle: FootprintStyle;
   showOverlapHeatmap: boolean;
   baseLayer: "osm" | "google";
   selectedPhotoIds?: string[];
@@ -39,6 +40,7 @@ const MapView = ({
   photos,
   kmlLayers,
   showFootprints,
+  footprintStyle,
   showOverlapHeatmap,
   baseLayer,
   selectedPhotoIds = [],
@@ -59,7 +61,6 @@ const MapView = ({
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
     if (!layer) return;
-
     layer.clearLayers();
 
     const points = measurementPointsRef.current.map(([lat, lng]) => ({ lat, lng }));
@@ -73,11 +74,7 @@ const MapView = ({
 
     points.forEach((point, index) => {
       L.circleMarker([point.lat, point.lng], {
-        radius: 5,
-        color: primary,
-        fillColor: ring,
-        fillOpacity: 1,
-        weight: 2,
+        radius: 5, color: primary, fillColor: ring, fillOpacity: 1, weight: 2,
       })
         .bindTooltip(`${index + 1}`, { permanent: true, direction: "top", offset: [0, -8] })
         .addTo(layer);
@@ -90,19 +87,15 @@ const MapView = ({
     };
 
     if (points.length >= 2) {
-      L.polyline(points.map((point) => [point.lat, point.lng] as [number, number]), {
-        color: primary,
-        weight: 3,
+      L.polyline(points.map((p) => [p.lat, p.lng] as [number, number]), {
+        color: primary, weight: 3,
         dashArray: measureModeRef.current === "area" ? "6 4" : undefined,
       }).addTo(layer);
     }
 
     if (measureModeRef.current === "area" && points.length >= 3) {
-      L.polygon(points.map((point) => [point.lat, point.lng] as [number, number]), {
-        color: primary,
-        fillColor: ring,
-        fillOpacity: 0.18,
-        weight: 2,
+      L.polygon(points.map((p) => [p.lat, p.lng] as [number, number]), {
+        color: primary, fillColor: ring, fillOpacity: 0.18, weight: 2,
       }).addTo(layer);
     }
 
@@ -116,14 +109,10 @@ const MapView = ({
 
   const addMeasurementPoint = (lat: number, lng: number) => {
     if (measureModeRef.current === "none") return false;
-
     const snapped = findNearestSnapTarget({ lat, lng }, snapTargetsRef.current, 16);
     const nextPoint: [number, number] = snapped ? [snapped.lat, snapped.lng] : [lat, lng];
-    const previousPoint = measurementPointsRef.current[measurementPointsRef.current.length - 1];
-
-    if (previousPoint && previousPoint[0] === nextPoint[0] && previousPoint[1] === nextPoint[1]) {
-      return true;
-    }
+    const prev = measurementPointsRef.current[measurementPointsRef.current.length - 1];
+    if (prev && prev[0] === nextPoint[0] && prev[1] === nextPoint[1]) return true;
 
     if (measureModeRef.current === "distance" && measurementPointsRef.current.length >= 2) {
       measurementPointsRef.current = [];
@@ -137,7 +126,8 @@ const MapView = ({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current).setView([52.0, 19.0], 6);
+    const map = L.map(containerRef.current, { zoomControl: false }).setView([52.0, 19.0], 6);
+    L.control.zoom({ position: "topright" }).addTo(map);
     mapRef.current = map;
     measurementLayerRef.current = L.layerGroup().addTo(map);
 
@@ -174,20 +164,17 @@ const MapView = ({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-
     map.eachLayer((layer) => {
       if (layer instanceof L.TileLayer) map.removeLayer(layer);
     });
 
     if (baseLayer === "google") {
       L.tileLayer("https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
-        attribution: "© Google",
-        maxZoom: 20,
+        attribution: "© Google", maxZoom: 20,
       }).addTo(map);
     } else {
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors",
-        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors", maxZoom: 19,
       }).addTo(map);
     }
   }, [baseLayer]);
@@ -196,7 +183,7 @@ const MapView = ({
     const map = mapRef.current;
     if (!map) return;
 
-    layersRef.current.forEach((layerGroup) => map.removeLayer(layerGroup));
+    layersRef.current.forEach((lg) => map.removeLayer(lg));
     layersRef.current = [];
 
     if (photos.length === 0) {
@@ -211,9 +198,8 @@ const MapView = ({
     const allOverlapping = new Map<string, { forward: number; lateral: number }>();
 
     for (const selectedId of selectedPhotoIds) {
-      const selectedPhoto = photos.find((photo) => photo.id === selectedId);
+      const selectedPhoto = photos.find((p) => p.id === selectedId);
       if (!selectedPhoto) continue;
-
       const overlaps = findOverlappingPhotos(selectedPhoto, photos);
       for (const overlap of overlaps) {
         const existing = allOverlapping.get(overlap.photo.id);
@@ -242,7 +228,6 @@ const MapView = ({
       });
 
       let popupContent = `<b>${photo.filename}</b><br/>Lat: ${photo.lat.toFixed(6)}<br/>Lng: ${photo.lng.toFixed(6)}<br/>Zasięg: ${photo.footprintWidth.toFixed(1)}m × ${photo.footprintHeight.toFixed(1)}m`;
-
       if (photo.altitude) popupContent += `<br/>Wys.: ${photo.altitude.toFixed(1)}m`;
       if (photo.speed !== undefined) popupContent += `<br/>Prędkość: ${photo.speed.toFixed(1)} m/s`;
       if (photo.gsd !== undefined) popupContent += `<br/>GSD: ${photo.gsd.toFixed(2)} cm/px`;
@@ -270,11 +255,9 @@ const MapView = ({
           L.DomEvent.stop(event);
           return;
         }
-
         const ctrlKey = Boolean(mouseEvent.ctrlKey || mouseEvent.metaKey);
         L.DomEvent.stop(event);
         onPhotoSelect?.(photo.id, ctrlKey);
-
         if (ctrlKey) {
           marker.closePopup();
           map.closePopup();
@@ -283,14 +266,14 @@ const MapView = ({
         }
       });
 
-      const shouldShowFootprint = showFootprints || isSelected || isOverlapping;
-      if (shouldShowFootprint && photo.footprintCorners.length === 4) {
+      // Only show footprints when toggle is ON
+      if (showFootprints && photo.footprintCorners.length === 4) {
         const color = isSelected
           ? "hsl(210, 100%, 50%)"
           : isOverlapping
             ? "hsl(120, 70%, 45%)"
-            : "hsl(222.2, 47.4%, 11.2%)";
-        const fillOpacity = isSelected ? 0.25 : isOverlapping ? 0.2 : 0.1;
+            : footprintStyle.color;
+        const fillOpacity = isSelected ? 0.25 : isOverlapping ? 0.2 : (footprintStyle.outlineOnly ? 0 : footprintStyle.fillOpacity);
 
         const footprint = L.polygon(photo.footprintCorners, {
           color,
@@ -311,7 +294,7 @@ const MapView = ({
       const overlapGroup = L.layerGroup().addTo(map);
       layersRef.current.push(overlapGroup);
 
-      const bounds = L.latLngBounds(photos.map((photo) => [photo.lat, photo.lng] as [number, number]));
+      const bounds = L.latLngBounds(photos.map((p) => [p.lat, p.lng] as [number, number]));
       const padding = 0.002;
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
@@ -328,32 +311,18 @@ const MapView = ({
           photos.forEach((photo) => {
             const corners = photo.footprintCorners;
             if (corners.length !== 4) return;
-
-            const minLat = Math.min(...corners.map((corner) => corner[0]));
-            const maxLat = Math.max(...corners.map((corner) => corner[0]));
-            const minLng = Math.min(...corners.map((corner) => corner[1]));
-            const maxLng = Math.max(...corners.map((corner) => corner[1]));
-
-            if (cellLat >= minLat && cellLat <= maxLat && cellLng >= minLng && cellLng <= maxLng) {
-              coverage++;
-            }
+            const minLat = Math.min(...corners.map((c) => c[0]));
+            const maxLat = Math.max(...corners.map((c) => c[0]));
+            const minLng = Math.min(...corners.map((c) => c[1]));
+            const maxLng = Math.max(...corners.map((c) => c[1]));
+            if (cellLat >= minLat && cellLat <= maxLat && cellLng >= minLng && cellLng <= maxLng) coverage++;
           });
 
           if (coverage >= 2) {
-            const color = coverage >= 5
-              ? "hsl(120, 70%, 40%)"
-              : coverage >= 4
-                ? "hsl(90, 70%, 45%)"
-                : coverage >= 3
-                  ? "hsl(60, 70%, 50%)"
-                  : "hsl(30, 70%, 50%)";
+            const color = coverage >= 5 ? "hsl(120, 70%, 40%)" : coverage >= 4 ? "hsl(90, 70%, 45%)" : coverage >= 3 ? "hsl(60, 70%, 50%)" : "hsl(30, 70%, 50%)";
             const opacity = Math.min(0.6, 0.2 + coverage * 0.08);
-
             L.rectangle(
-              [
-                [sw.lat - padding + latStep * i, sw.lng - padding + lngStep * j],
-                [sw.lat - padding + latStep * (i + 1), sw.lng - padding + lngStep * (j + 1)],
-              ],
+              [[sw.lat - padding + latStep * i, sw.lng - padding + lngStep * j], [sw.lat - padding + latStep * (i + 1), sw.lng - padding + lngStep * (j + 1)]],
               { color: "transparent", fillColor: color, fillOpacity: opacity, weight: 0 }
             ).addTo(overlapGroup);
           }
@@ -362,34 +331,29 @@ const MapView = ({
     }
 
     if (!fitDoneRef.current) {
-      const allPoints = photos.map((photo) => [photo.lat, photo.lng] as [number, number]);
+      const allPoints = photos.map((p) => [p.lat, p.lng] as [number, number]);
       if (allPoints.length > 0) {
         map.fitBounds(L.latLngBounds(allPoints), { padding: [50, 50] });
         fitDoneRef.current = true;
       }
     }
-  }, [photos, showFootprints, showOverlapHeatmap, selectedPhotoIds, onPhotoSelect]);
+  }, [photos, showFootprints, footprintStyle, showOverlapHeatmap, selectedPhotoIds, onPhotoSelect]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-
     map.eachLayer((layer) => {
       if ((layer as any)._isKml) map.removeLayer(layer);
     });
 
     kmlLayers.forEach((layer) => {
       if (!layer.visible) return;
-
       const geoLayer = L.geoJSON(layer.geojson, {
-        style: { color: layer.color, weight: 2, opacity: 0.8 },
+        style: { color: layer.color, weight: layer.weight, opacity: 0.8 },
         onEachFeature: (feature, featureLayer) => {
-          if (feature.properties?.name) {
-            featureLayer.bindPopup(feature.properties.name);
-          }
+          if (feature.properties?.name) featureLayer.bindPopup(feature.properties.name);
         },
       });
-
       (geoLayer as any)._isKml = true;
       geoLayer.addTo(map);
     });
