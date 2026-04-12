@@ -182,6 +182,23 @@ const Index = () => {
     setMeasurementResetSignal((value) => value + 1);
   }, []);
 
+  const handleCheckCoverage = useCallback((kmlId: string) => {
+    const layer = kmlLayers.find((l) => l.id === kmlId);
+    if (!layer) return;
+    if (photos.length === 0) {
+      toast.warning("Brak zdjęć do analizy pokrycia");
+      return;
+    }
+    const result = analyzeCoverage(layer, photos);
+    setCoverageResults((prev) => ({ ...prev, [kmlId]: result }));
+    setCoverageGaps(result.gaps);
+    if (result.coveragePercent >= 95) {
+      toast.success(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — obszar w pełni pokryty`);
+    } else {
+      toast.warning(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — wykryto luki`);
+    }
+  }, [kmlLayers, photos]);
+
   return (
     <div
       className="relative flex h-screen w-screen overflow-hidden bg-background"
