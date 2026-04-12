@@ -18,7 +18,7 @@ const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [photos, setPhotos] = useState<PhotoPoint[]>([]);
   const [kmlLayers, setKmlLayers] = useState<KmlLayer[]>([]);
-  const [sensor, setSensor] = useState<SensorConfig>(DEFAULT_SENSOR);
+  const [sensor, setSensor] = useState<SensorConfig>({ resolutionX: 4000, resolutionY: 3000, sensorWidth: 13.2, sensorHeight: 8.8, focalLength: 8.8, flightAltitude: 100 });
   const [showFootprints, setShowFootprints] = useState(true);
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
@@ -190,7 +190,7 @@ const Index = () => {
         if (files[0].name.match(/\.(kml|kmz)$/i)) {
           handleImportKml(files[0]);
         } else {
-          handleImportPhotos(files);
+          startImport(files);
         }
       }}
       onDragOver={(event) => event.preventDefault()}
@@ -217,7 +217,7 @@ const Index = () => {
           selectedOverlapStats={selectedOverlapStats}
           measureMode={measureMode}
           measurement={measurement}
-          onImportPhotos={handleImportPhotos}
+          onImportPhotos={startImport}
           onImportKml={handleImportKml}
           onToggleFootprints={setShowFootprints}
           onFootprintStyleChange={setFootprintStyle}
