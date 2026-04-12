@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -33,7 +34,8 @@ const Index = () => {
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
   const [showAglPrompt, setShowAglPrompt] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
-
+  const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
+  const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
   const selectedOverlapStats = useMemo(
@@ -180,6 +182,23 @@ const Index = () => {
     setMeasurementResetSignal((value) => value + 1);
   }, []);
 
+  const handleCheckCoverage = useCallback((kmlId: string) => {
+    const layer = kmlLayers.find((l) => l.id === kmlId);
+    if (!layer) return;
+    if (photos.length === 0) {
+      toast.warning("Brak zdjęć do analizy pokrycia");
+      return;
+    }
+    const result = analyzeCoverage(layer, photos);
+    setCoverageResults((prev) => ({ ...prev, [kmlId]: result }));
+    setCoverageGaps(result.gaps);
+    if (result.coveragePercent >= 95) {
+      toast.success(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — obszar w pełni pokryty`);
+    } else {
+      toast.warning(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — wykryto luki`);
+    }
+  }, [kmlLayers, photos]);
+
   return (
     <div
       className="relative flex h-screen w-screen overflow-hidden bg-background"
@@ -246,6 +265,8 @@ const Index = () => {
           onSearchResult={handleSearchResult}
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
+          onCheckCoverage={handleCheckCoverage}
+          coverageResults={coverageResults}
         />
       </div>
 
@@ -279,6 +300,7 @@ const Index = () => {
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
           onMapClick={(lat, lng) => setClickedCoords({ lat, lng })}
+          coverageGaps={coverageGaps}
         />
 
         {/* AGL prompt dialog */}

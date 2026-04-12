@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint } from "@/types/photo";
 import { findOverlappingPhotos } from "@/lib/photoUtils";
 import { calcPolygonArea, calcPolylineDistance, createPhotoSnapTargets, findNearestSnapTarget } from "@/lib/measurementUtils";
+import { CoverageResult } from "@/lib/coverageUtils";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -29,6 +30,7 @@ interface MapViewProps {
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
   onMapClick?: (lat: number, lng: number) => void;
+  coverageGaps?: CoverageResult["gaps"];
 }
 
 const getThemeColor = (token: string, fallback: string) => {
@@ -50,6 +52,7 @@ const MapView = ({
   measurementResetSignal,
   onMeasurementChange,
   onMapClick,
+  coverageGaps = [],
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -364,6 +367,37 @@ const MapView = ({
       geoLayer.addTo(map);
     });
   }, [kmlLayers]);
+
+  // Coverage gaps visualization
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.eachLayer((layer) => {
+      if ((layer as any)._isCoverageGap) map.removeLayer(layer);
+    });
+
+    if (coverageGaps.length === 0) return;
+
+    const gapGroup = L.layerGroup();
+    (gapGroup as any)._isCoverageGap = true;
+
+    coverageGaps.forEach((gap) => {
+      L.rectangle(
+        [
+          [gap.lat - gap.latSize / 2, gap.lng - gap.lngSize / 2],
+          [gap.lat + gap.latSize / 2, gap.lng + gap.lngSize / 2],
+        ],
+        {
+          color: "red",
+          fillColor: "red",
+          fillOpacity: 0.35,
+          weight: 0.5,
+        }
+      ).addTo(gapGroup);
+    });
+
+    gapGroup.addTo(map);
+  }, [coverageGaps]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 };
