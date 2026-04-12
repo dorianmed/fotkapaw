@@ -265,6 +265,8 @@ const Index = () => {
           onSearchResult={handleSearchResult}
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
+          onCheckCoverage={handleCheckCoverage}
+          coverageResults={coverageResults}
         />
       </div>
 
