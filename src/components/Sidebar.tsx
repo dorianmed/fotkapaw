@@ -262,6 +262,40 @@ const Sidebar = ({
                 />
                 <span className="font-mono w-4 text-right">{layer.weight}</span>
               </div>
+              {photos.length > 0 && (
+                <div className="space-y-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => onCheckCoverage(layer.id)}
+                  >
+                    <ShieldCheck className="mr-1 h-3 w-3" /> Sprawdź pokrycie
+                  </Button>
+                  {coverageResults[layer.id] && (() => {
+                    const r = coverageResults[layer.id];
+                    const color = r.coveragePercent >= 95 ? "text-green-600" : r.coveragePercent >= 80 ? "text-yellow-600" : "text-red-600";
+                    return (
+                      <div className="rounded border p-2 text-xs space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Pokrycie obszaru:</span>
+                          <span className={`font-mono font-bold ${color}`}>{r.coveragePercent.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Komórki pokryte:</span>
+                          <span className="font-mono">{r.coveredCells}/{r.totalCells}</span>
+                        </div>
+                        {r.gaps.length > 0 && (
+                          <p className="text-red-500 text-xs mt-1">⚠ Wykryto {r.gaps.length} luk w pokryciu (czerwone na mapie)</p>
+                        )}
+                        {r.gaps.length === 0 && (
+                          <p className="text-green-600 text-xs mt-1">✓ Cały obszar pokryty zdjęciami</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           ))}
         </CardContent>
