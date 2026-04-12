@@ -368,6 +368,37 @@ const MapView = ({
     });
   }, [kmlLayers]);
 
+  // Coverage gaps visualization
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.eachLayer((layer) => {
+      if ((layer as any)._isCoverageGap) map.removeLayer(layer);
+    });
+
+    if (coverageGaps.length === 0) return;
+
+    const gapGroup = L.layerGroup();
+    (gapGroup as any)._isCoverageGap = true;
+
+    coverageGaps.forEach((gap) => {
+      L.rectangle(
+        [
+          [gap.lat - gap.latSize / 2, gap.lng - gap.lngSize / 2],
+          [gap.lat + gap.latSize / 2, gap.lng + gap.lngSize / 2],
+        ],
+        {
+          color: "red",
+          fillColor: "red",
+          fillOpacity: 0.35,
+          weight: 0.5,
+        }
+      ).addTo(gapGroup);
+    });
+
+    gapGroup.addTo(map);
+  }, [coverageGaps]);
+
   return <div ref={containerRef} className="h-full w-full" />;
 };
 
