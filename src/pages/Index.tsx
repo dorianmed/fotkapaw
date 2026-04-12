@@ -300,6 +300,7 @@ const Index = () => {
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
           onMapClick={(lat, lng) => setClickedCoords({ lat, lng })}
+          coverageGaps={coverageGaps}
         />
 
         {/* AGL prompt dialog */}
