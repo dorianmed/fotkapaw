@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint } from "@/types/photo";
 import { findOverlappingPhotos } from "@/lib/photoUtils";
 import { calcPolygonArea, calcPolylineDistance, createPhotoSnapTargets, findNearestSnapTarget } from "@/lib/measurementUtils";
+import { CoverageResult } from "@/lib/coverageUtils";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -29,6 +30,7 @@ interface MapViewProps {
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
   onMapClick?: (lat: number, lng: number) => void;
+  coverageGaps?: CoverageResult["gaps"];
 }
 
 const getThemeColor = (token: string, fallback: string) => {
