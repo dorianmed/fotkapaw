@@ -52,6 +52,7 @@ const MapView = ({
   measurementResetSignal,
   onMeasurementChange,
   onMapClick,
+  coverageGaps = [],
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
