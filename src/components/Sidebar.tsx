@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SearchBar from "@/components/SearchBar";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, OverlapStats, PhotoPoint, SensorConfig } from "@/types/photo";
-import { BarChart3, Camera, Download, FolderOpen, Layers, Map, MoveHorizontal, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair } from "lucide-react";
+import { BarChart3, Camera, Download, FolderOpen, Layers, Map, MoveHorizontal, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck } from "lucide-react";
+import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
 
 interface SidebarProps {
@@ -40,6 +41,8 @@ interface SidebarProps {
   onSearchResult: (lat: number, lng: number, label: string) => void;
   onMeasureModeChange: (mode: MeasureMode) => void;
   onClearMeasurement: () => void;
+  onCheckCoverage: (kmlId: string) => void;
+  coverageResults: Record<string, CoverageResult>;
 }
 
 const exportKml = (layer: KmlLayer) => {
@@ -98,6 +101,8 @@ const Sidebar = ({
   onSearchResult,
   onMeasureModeChange,
   onClearMeasurement,
+  onCheckCoverage,
+  coverageResults,
 }: SidebarProps) => {
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
