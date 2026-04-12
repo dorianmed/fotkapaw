@@ -13,13 +13,17 @@ type OverlapCandidate = {
  * Próbuje oszacować wymiary sensora z EXIF.
  * Priorytet: 35mm equivalent + focal, potem bezpośrednie pola EXIF, na końcu fallback techniczny.
  */
-export function estimateSensorDimensions(exif: any, fallbackSensor: SensorConfig) {
-  const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || fallbackSensor.resolutionX || 4000;
-  const heightPx = exif.ExifImageHeight || exif.PixelYDimension || exif.ImageHeight || fallbackSensor.resolutionY || 3000;
+export function estimateSensorDimensions(exif: any) {
+  const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || 4000;
+  const heightPx = exif.ExifImageHeight || exif.PixelYDimension || exif.ImageHeight || 3000;
   const focal35 = Number(exif.FocalLengthIn35mmFormat);
   const focalReal = Number(exif.FocalLength);
   const exifSensorWidth = Number(exif.SensorWidth || exif.sensorWidth);
   const exifSensorHeight = Number(exif.SensorHeight || exif.sensorHeight);
+
+  // Try pixel pitch from FocalPlaneResolution
+  const fpResX = Number(exif.FocalPlaneXResolution);
+  const fpResUnit = Number(exif.FocalPlaneResolutionUnit); // 2=inch, 3=cm, 4=mm
 
   if (focal35 > 0 && focalReal > 0) {
     const cropFactor = focal35 / focalReal;
@@ -46,10 +50,29 @@ export function estimateSensorDimensions(exif: any, fallbackSensor: SensorConfig
     };
   }
 
+  // Try deriving from FocalPlaneResolution
+  if (fpResX > 0 && focalReal > 0) {
+    let pixelPitchMm: number;
+    if (fpResUnit === 3) pixelPitchMm = 10 / fpResX; // cm
+    else if (fpResUnit === 4) pixelPitchMm = 1 / fpResX; // mm
+    else pixelPitchMm = 25.4 / fpResX; // inch (default)
+    const sw = widthPx * pixelPitchMm;
+    const sh = heightPx * pixelPitchMm;
+    return {
+      width: sw,
+      height: sh,
+      focal: focalReal,
+      resX: widthPx,
+      resY: heightPx,
+      source: "estimated" as const,
+    };
+  }
+
+  // Fallback: assume typical small sensor
   return {
-    width: fallbackSensor.sensorWidth,
-    height: fallbackSensor.sensorHeight,
-    focal: focalReal > 0 ? focalReal : fallbackSensor.focalLength,
+    width: 13.2,
+    height: 8.8,
+    focal: focalReal > 0 ? focalReal : 8.8,
     resX: widthPx,
     resY: heightPx,
     source: "fallback" as const,

@@ -250,6 +250,7 @@ const MapView = ({
 
       const marker = L.marker([photo.lat, photo.lng], { icon: cameraIcon })
         .bindPopup(popupContent, { autoPan: false })
+        .bindTooltip(photo.filename, { direction: "top", offset: [0, -size / 2 - 4], className: "leaflet-tooltip-photo" })
         .addTo(photoGroup);
 
       marker.off("click");

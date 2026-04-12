@@ -5,10 +5,12 @@ import L from "leaflet";
 import { Camera, Menu, X } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
-import { DEFAULT_FOOTPRINT_STYLE, DEFAULT_SENSOR, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
+import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
 import { analyzeOverlap, assignHeadings, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -16,7 +18,7 @@ const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [photos, setPhotos] = useState<PhotoPoint[]>([]);
   const [kmlLayers, setKmlLayers] = useState<KmlLayer[]>([]);
-  const [sensor, setSensor] = useState<SensorConfig>(DEFAULT_SENSOR);
+  const [sensor, setSensor] = useState<SensorConfig>({ resolutionX: 4000, resolutionY: 3000, sensorWidth: 13.2, sensorHeight: 8.8, focalLength: 8.8, flightAltitude: 100 });
   const [showFootprints, setShowFootprints] = useState(true);
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
@@ -28,6 +30,9 @@ const Index = () => {
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
+  const [aglAltitude, setAglAltitude] = useState<number | null>(null);
+  const [showAglPrompt, setShowAglPrompt] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
 
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
@@ -36,10 +41,14 @@ const Index = () => {
     [selectedPhotos]
   );
 
-  const handleImportPhotos = useCallback(async (files: FileList) => {
+  const startImport = useCallback((files: FileList) => {
+    setPendingFiles(files);
+    setShowAglPrompt(true);
+  }, []);
+
+  const processImport = useCallback(async (files: FileList, userAgl: number) => {
     const newPhotos: PhotoPoint[] = [];
     let noGps = 0;
-    const fallbackSensor: SensorConfig = { ...DEFAULT_SENSOR, flightAltitude: sensor.flightAltitude };
     const total = files.length;
 
     setImportProgress({ current: 0, total });
@@ -54,18 +63,19 @@ const Index = () => {
           continue;
         }
 
-        const estimated = estimateSensorDimensions(exif, fallbackSensor);
+        const estimated = estimateSensorDimensions(exif);
+        const altitudeAGL = userAgl;
+
         const currentSensor: SensorConfig = {
-          ...fallbackSensor,
+          resolutionX: estimated.resX,
+          resolutionY: estimated.resY,
           sensorWidth: estimated.width,
           sensorHeight: estimated.height,
           focalLength: estimated.focal,
-          resolutionX: estimated.resX,
-          resolutionY: estimated.resY,
+          flightAltitude: altitudeAGL,
         };
 
-        const altitude = exif.GPSAltitude ?? sensor.flightAltitude;
-        const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitude);
+        const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
         const longSide = Math.max(groundWidth, groundHeight);
         const shortSide = Math.min(groundWidth, groundHeight);
 
@@ -79,7 +89,7 @@ const Index = () => {
           footprintWidth: longSide,
           footprintHeight: shortSide,
           footprintCorners: [],
-          gsd: calcGSD(currentSensor, altitude),
+          gsd: calcGSD(currentSensor, altitudeAGL),
           sensorInfo: {
             sensorWidth: estimated.width,
             sensorHeight: estimated.height,
@@ -112,7 +122,15 @@ const Index = () => {
     }
 
     setImportProgress(null);
-  }, [sensor.flightAltitude]);
+  }, []);
+
+  const handleAglConfirm = useCallback(() => {
+    if (pendingFiles && aglAltitude !== null && aglAltitude > 0) {
+      setShowAglPrompt(false);
+      processImport(pendingFiles, aglAltitude);
+      setPendingFiles(null);
+    }
+  }, [pendingFiles, aglAltitude, processImport]);
 
   const handleImportKml = useCallback(async (file: File) => {
     try {
@@ -172,7 +190,7 @@ const Index = () => {
         if (files[0].name.match(/\.(kml|kmz)$/i)) {
           handleImportKml(files[0]);
         } else {
-          handleImportPhotos(files);
+          startImport(files);
         }
       }}
       onDragOver={(event) => event.preventDefault()}
@@ -199,7 +217,7 @@ const Index = () => {
           selectedOverlapStats={selectedOverlapStats}
           measureMode={measureMode}
           measurement={measurement}
-          onImportPhotos={handleImportPhotos}
+          onImportPhotos={startImport}
           onImportKml={handleImportKml}
           onToggleFootprints={setShowFootprints}
           onFootprintStyleChange={setFootprintStyle}
@@ -263,17 +281,51 @@ const Index = () => {
           onMapClick={(lat, lng) => setClickedCoords({ lat, lng })}
         />
 
+        {/* AGL prompt dialog */}
+        {showAglPrompt && (
+          <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/50">
+            <div className="rounded-lg border bg-card p-6 shadow-xl w-80 space-y-4">
+              <h3 className="text-sm font-bold text-foreground">Podaj wysokość lotu AGL</h3>
+              <p className="text-xs text-muted-foreground">
+                Wysokość nad terenem (Above Ground Level) w metrach. Jest potrzebna do poprawnego obliczenia zasięgów i GSD.
+              </p>
+              <Input
+                type="number"
+                step="0.1"
+                min="1"
+                placeholder="np. 100"
+                value={aglAltitude ?? ""}
+                onChange={(e) => setAglAltitude(parseFloat(e.target.value) || null)}
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleAglConfirm()}
+              />
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={handleAglConfirm} disabled={!aglAltitude || aglAltitude <= 0}>
+                  Importuj
+                </Button>
+                <Button variant="outline" onClick={() => { setShowAglPrompt(false); setPendingFiles(null); }}>
+                  Anuluj
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Coordinate display */}
         {clickedCoords && (() => {
           const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
           return (
-            <div className="absolute bottom-4 left-4 z-[1000] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground">
+            <div
+              className="absolute bottom-4 left-4 z-[1000] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-center gap-2 mb-1">
                 <Select value={coordSystem} onValueChange={(v) => setCoordSystem(v as CoordinateSystem)}>
                   <SelectTrigger className="h-6 w-[130px] text-xs border-muted">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[2000]">
                     {COORDINATE_SYSTEMS.map((cs) => (
                       <SelectItem key={cs.value} value={cs.value} className="text-xs">{cs.label}</SelectItem>
                     ))}
