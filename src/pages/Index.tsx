@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -33,7 +34,8 @@ const Index = () => {
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
   const [showAglPrompt, setShowAglPrompt] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
-
+  const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
+  const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
   const selectedOverlapStats = useMemo(
