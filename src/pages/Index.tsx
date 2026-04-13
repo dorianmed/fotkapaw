@@ -366,6 +366,13 @@ const Index = () => {
           onClearMeasurement={handleClearMeasurement}
           onCheckCoverage={handleCheckCoverage}
           coverageResults={coverageResults}
+          drawMode={drawMode}
+          drawnFeatures={drawnFeatures}
+          onImportVector={handleImportVector}
+          onDrawModeChange={handleDrawModeChange}
+          onRemoveDrawnFeature={(id) => setDrawnFeatures((prev) => prev.filter((f) => f.id !== id))}
+          onClearDrawnFeatures={() => setDrawnFeatures([])}
+          onExportDrawnFeatures={handleExportDrawnFeatures}
         />
       </div>
 
