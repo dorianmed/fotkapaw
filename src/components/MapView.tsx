@@ -31,7 +31,11 @@ interface MapViewProps {
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
   onMapClick?: (lat: number, lng: number) => void;
+  onMapDblClick?: () => void;
   coverageGaps?: CoverageResult["gaps"];
+  drawnFeatures?: DrawnFeature[];
+  drawingPoints?: [number, number][];
+  drawMode?: DrawMode;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
