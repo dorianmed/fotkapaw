@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SearchBar from "@/components/SearchBar";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, OverlapStats, PhotoPoint, SensorConfig } from "@/types/photo";
-import { BarChart3, Camera, Download, FolderOpen, Layers, Map, MoveHorizontal, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck } from "lucide-react";
+import { BarChart3, Camera, Download, FileText, FolderOpen, Layers, Map, MousePointer, MoveHorizontal, Pencil, PenTool, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck, Square, Minus, CircleDot } from "lucide-react";
 import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
+import { DrawMode, DrawnFeature } from "@/types/drawing";
+import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
 
 interface SidebarProps {
   photos: PhotoPoint[];
@@ -24,8 +26,11 @@ interface SidebarProps {
   selectedOverlapStats: OverlapStats | null;
   measureMode: MeasureMode;
   measurement: MeasurementSummary | null;
+  drawMode: DrawMode;
+  drawnFeatures: DrawnFeature[];
   onImportPhotos: (files: FileList) => void;
   onImportKml: (file: File) => void;
+  onImportVector: (file: File) => void;
   onToggleFootprints: (value: boolean) => void;
   onFootprintStyleChange: (style: FootprintStyle) => void;
   onToggleOverlap: (value: boolean) => void;
@@ -43,6 +48,10 @@ interface SidebarProps {
   onClearMeasurement: () => void;
   onCheckCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
+  onDrawModeChange: (mode: DrawMode) => void;
+  onRemoveDrawnFeature: (id: string) => void;
+  onClearDrawnFeatures: () => void;
+  onExportDrawnFeatures: (format: "kml" | "dxf" | "geojson" | "txt") => void;
 }
 
 const exportKml = (layer: KmlLayer) => {
@@ -84,8 +93,11 @@ const Sidebar = ({
   selectedOverlapStats,
   measureMode,
   measurement,
+  drawMode,
+  drawnFeatures,
   onImportPhotos,
   onImportKml,
+  onImportVector,
   onToggleFootprints,
   onFootprintStyleChange,
   onToggleOverlap,
@@ -103,6 +115,10 @@ const Sidebar = ({
   onClearMeasurement,
   onCheckCoverage,
   coverageResults,
+  onDrawModeChange,
+  onRemoveDrawnFeature,
+  onClearDrawnFeatures,
+  onExportDrawnFeatures,
 }: SidebarProps) => {
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
@@ -206,14 +222,46 @@ const Sidebar = ({
         </CardContent>
       </Card>
 
-      {/* KML */}
+      {/* Warstwy wektorowe */}
       <Card>
         <CardHeader className="px-4 pb-2 pt-4">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <Layers className="h-4 w-4" /> Warstwy KML
+            <Layers className="h-4 w-4" /> Warstwy wektorowe
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 px-4 pb-4">
+          <label className="block">
+            <input
+              type="file"
+              accept=".kml,.kmz"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files) Array.from(files).forEach((f) => onImportKml(f));
+                e.target.value = "";
+              }}
+            />
+            <Button variant="outline" className="w-full" asChild>
+              <span><Upload className="mr-2 h-4 w-4" /> Importuj KML</span>
+            </Button>
+          </label>
+          <label className="block">
+            <input
+              type="file"
+              accept=".dxf,.shp,.zip,.txt,.csv"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files) Array.from(files).forEach((f) => onImportVector(f));
+                e.target.value = "";
+              }}
+            />
+            <Button variant="outline" className="w-full" asChild>
+              <span><FileText className="mr-2 h-4 w-4" /> Importuj DXF / SHP / TXT</span>
+            </Button>
+          </label>
           <label className="block">
             <input
               type="file"
@@ -246,7 +294,9 @@ const Sidebar = ({
                   <Button variant="ghost" size="sm" onClick={() => onToggleKmlLayer(layer.id)}>
                     {layer.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportKml(layer)} title="Eksportuj KML"><Download className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportKml(layer)} title="KML"><Download className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportDxf(layer.geojson, layer.name)} title="DXF"><span className="text-[9px]">DXF</span></Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportGeoJson(layer.geojson, layer.name)} title="GeoJSON"><span className="text-[9px]">GJ</span></Button>
                   <Button variant="ghost" size="sm" onClick={() => onRemoveKmlLayer(layer.id)}><Trash2 className="h-3 w-3" /></Button>
                 </div>
               </div>
@@ -298,6 +348,57 @@ const Sidebar = ({
               )}
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Rysowanie */}
+      <Card>
+        <CardHeader className="px-4 pb-2 pt-4">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <PenTool className="h-4 w-4" /> Rysowanie
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 px-4 pb-4">
+          <div className="grid grid-cols-4 gap-1">
+            <Button variant={drawMode === "none" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("none")} title="Wyłącz">
+              <MousePointer className="h-3 w-3" />
+            </Button>
+            <Button variant={drawMode === "point" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("point")} title="Punkt">
+              <CircleDot className="h-3 w-3" />
+            </Button>
+            <Button variant={drawMode === "line" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("line")} title="Linia">
+              <Minus className="h-3 w-3" />
+            </Button>
+            <Button variant={drawMode === "polygon" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("polygon")} title="Powierzchnia">
+              <Square className="h-3 w-3" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {drawMode === "point" && "Klikaj na mapie żeby dodać punkty."}
+            {drawMode === "line" && "Klikaj na mapie, dblklik kończy linię."}
+            {drawMode === "polygon" && "Klikaj na mapie, dblklik zamyka poligon."}
+            {drawMode === "none" && "Wybierz narzędzie rysowania."}
+          </p>
+          {drawnFeatures.length > 0 && (
+            <div className="space-y-1">
+              <Badge variant="secondary">{drawnFeatures.length} obiektów</Badge>
+              {drawnFeatures.map((f) => (
+                <div key={f.id} className="flex items-center justify-between text-xs rounded border px-2 py-1">
+                  <span className="truncate text-foreground">{f.name}</span>
+                  <Button variant="ghost" size="sm" onClick={() => onRemoveDrawnFeature(f.id)}><Trash2 className="h-3 w-3" /></Button>
+                </div>
+              ))}
+              <div className="grid grid-cols-2 gap-1 pt-1">
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("kml")}>Export KML</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("dxf")}>Export DXF</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("geojson")}>Export GeoJSON</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("txt")}>Export TXT</Button>
+              </div>
+              <Button variant="ghost" size="sm" className="w-full text-xs" onClick={onClearDrawnFeatures}>
+                <Trash2 className="mr-1 h-3 w-3" /> Wyczyść wszystko
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

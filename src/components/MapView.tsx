@@ -5,6 +5,7 @@ import { FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint }
 import { findOverlappingPhotos } from "@/lib/photoUtils";
 import { calcPolygonArea, calcPolylineDistance, createPhotoSnapTargets, findNearestSnapTarget } from "@/lib/measurementUtils";
 import { CoverageResult } from "@/lib/coverageUtils";
+import { DrawMode, DrawnFeature } from "@/types/drawing";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -30,7 +31,11 @@ interface MapViewProps {
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
   onMapClick?: (lat: number, lng: number) => void;
+  onMapDblClick?: () => void;
   coverageGaps?: CoverageResult["gaps"];
+  drawnFeatures?: DrawnFeature[];
+  drawingPoints?: [number, number][];
+  drawMode?: DrawMode;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
@@ -52,7 +57,11 @@ const MapView = ({
   measurementResetSignal,
   onMeasurementChange,
   onMapClick,
+  onMapDblClick,
   coverageGaps = [],
+  drawnFeatures = [],
+  drawingPoints = [],
+  drawMode = "none",
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,7 +71,9 @@ const MapView = ({
   const measurementPointsRef = useRef<[number, number][]>([]);
   const measureModeRef = useRef<MeasureMode>(measureMode);
   const onMapClickRef = useRef(onMapClick);
+  const onMapDblClickRef = useRef(onMapDblClick);
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
+  const drawingLayerRef = useRef<L.LayerGroup | null>(null);
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
@@ -132,10 +143,11 @@ const MapView = ({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current, { zoomControl: false }).setView([52.0, 19.0], 6);
+    const map = L.map(containerRef.current, { zoomControl: false, doubleClickZoom: false }).setView([52.0, 19.0], 6);
     L.control.zoom({ position: "topright" }).addTo(map);
     mapRef.current = map;
     measurementLayerRef.current = L.layerGroup().addTo(map);
+    drawingLayerRef.current = L.layerGroup().addTo(map);
 
     const handleZoom = (event: Event) => {
       const bounds = (event as CustomEvent).detail.bounds;
@@ -148,12 +160,19 @@ const MapView = ({
       addMeasurementPoint(event.latlng.lat, event.latlng.lng);
     };
 
+    const handleMapDblClick = (event: L.LeafletMouseEvent) => {
+      onMapDblClickRef.current?.();
+      L.DomEvent.stop(event);
+    };
+
     window.addEventListener("zoom-to-bounds", handleZoom);
     map.on("click", handleMapClick);
+    map.on("dblclick", handleMapDblClick);
 
     return () => {
       window.removeEventListener("zoom-to-bounds", handleZoom);
       map.off("click", handleMapClick);
+      map.off("dblclick", handleMapDblClick);
       map.remove();
       mapRef.current = null;
     };
@@ -162,8 +181,9 @@ const MapView = ({
   useEffect(() => {
     measureModeRef.current = measureMode;
     onMapClickRef.current = onMapClick;
+    onMapDblClickRef.current = onMapDblClick;
     snapTargetsRef.current = createPhotoSnapTargets(photos);
-  }, [measureMode, onMapClick, photos]);
+  }, [measureMode, onMapClick, onMapDblClick, photos]);
 
   useEffect(() => {
     resetMeasurement();
@@ -398,6 +418,42 @@ const MapView = ({
 
     gapGroup.addTo(map);
   }, [coverageGaps]);
+
+  // Drawing layer
+  useEffect(() => {
+    const layer = drawingLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    // Render completed features
+    drawnFeatures.forEach((f) => {
+      if (f.type === "point" && f.coordinates.length > 0) {
+        const [lat, lng] = f.coordinates[0];
+        L.circleMarker([lat, lng], { radius: 6, color: f.color, fillColor: f.color, fillOpacity: 0.8, weight: 2 })
+          .bindTooltip(f.name, { direction: "top", offset: [0, -8] })
+          .addTo(layer);
+      } else if (f.type === "line" && f.coordinates.length >= 2) {
+        L.polyline(f.coordinates, { color: f.color, weight: 3 })
+          .bindTooltip(f.name, { direction: "top" })
+          .addTo(layer);
+      } else if (f.type === "polygon" && f.coordinates.length >= 3) {
+        L.polygon(f.coordinates, { color: f.color, fillColor: f.color, fillOpacity: 0.2, weight: 2 })
+          .bindTooltip(f.name, { direction: "center" })
+          .addTo(layer);
+      }
+    });
+
+    // Render in-progress drawing
+    if (drawingPoints.length > 0) {
+      const color = drawMode === "line" ? "#3b82f6" : "#22c55e";
+      drawingPoints.forEach(([lat, lng]) => {
+        L.circleMarker([lat, lng], { radius: 4, color, fillColor: color, fillOpacity: 1, weight: 2 }).addTo(layer);
+      });
+      if (drawingPoints.length >= 2) {
+        L.polyline(drawingPoints, { color, weight: 2, dashArray: "6 4" }).addTo(layer);
+      }
+    }
+  }, [drawnFeatures, drawingPoints, drawMode]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 };

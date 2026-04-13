@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
+import { DrawMode, DrawnFeature } from "@/types/drawing";
+import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -36,6 +38,9 @@ const Index = () => {
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
+  const [drawMode, setDrawMode] = useState<DrawMode>("none");
+  const [drawnFeatures, setDrawnFeatures] = useState<DrawnFeature[]>([]);
+  const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
   const selectedOverlapStats = useMemo(
@@ -199,6 +204,97 @@ const Index = () => {
     }
   }, [kmlLayers, photos]);
 
+  const handleImportVector = useCallback(async (file: File) => {
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      let geojson: GeoJSON.FeatureCollection;
+      if (ext === "dxf") {
+        geojson = await importDxf(file);
+      } else if (ext === "shp" || ext === "zip") {
+        geojson = await importShp(file);
+      } else if (ext === "txt" || ext === "csv") {
+        geojson = importTxt(await file.text());
+      } else {
+        toast.error(`Nieobsługiwany format: .${ext}`);
+        return;
+      }
+      if (geojson.features.length === 0) {
+        toast.warning("Brak obiektów w pliku");
+        return;
+      }
+      setKmlLayers((prev) => [
+        ...prev,
+        { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, geojson },
+      ]);
+      toast.success(`Zaimportowano ${geojson.features.length} obiektów z ${file.name}`);
+    } catch (err) {
+      toast.error(`Błąd importu: ${(err as Error).message}`);
+    }
+  }, []);
+
+  const handleDrawModeChange = useCallback((mode: DrawMode) => {
+    setDrawMode(mode);
+    setDrawingPoints([]);
+  }, []);
+
+  const handleMapClickForDrawing = useCallback((lat: number, lng: number) => {
+    if (drawMode === "point") {
+      const id = `draw-${Date.now()}`;
+      setDrawnFeatures((prev) => [...prev, { id, type: "point", coordinates: [[lat, lng]], name: `Punkt ${prev.filter(f => f.type === "point").length + 1}`, color: "#ef4444" }]);
+    } else if (drawMode === "line" || drawMode === "polygon") {
+      setDrawingPoints((prev) => [...prev, [lat, lng]]);
+    }
+  }, [drawMode]);
+
+  const handleMapDblClickForDrawing = useCallback(() => {
+    if (drawMode === "line" && drawingPoints.length >= 2) {
+      const id = `draw-${Date.now()}`;
+      setDrawnFeatures((prev) => [...prev, { id, type: "line", coordinates: drawingPoints, name: `Linia ${prev.filter(f => f.type === "line").length + 1}`, color: "#3b82f6" }]);
+      setDrawingPoints([]);
+    } else if (drawMode === "polygon" && drawingPoints.length >= 3) {
+      const id = `draw-${Date.now()}`;
+      setDrawnFeatures((prev) => [...prev, { id, type: "polygon", coordinates: drawingPoints, name: `Poligon ${prev.filter(f => f.type === "polygon").length + 1}`, color: "#22c55e" }]);
+      setDrawingPoints([]);
+    }
+  }, [drawMode, drawingPoints]);
+
+  const handleExportDrawnFeatures = useCallback((format: "kml" | "dxf" | "geojson" | "txt") => {
+    const geojson: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: drawnFeatures.map((f) => {
+        if (f.type === "point") {
+          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "Point" as const, coordinates: [f.coordinates[0][1], f.coordinates[0][0]] } };
+        } else if (f.type === "line") {
+          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => [lng, lat]) } };
+        } else {
+          const coords = [...f.coordinates.map(([lat, lng]) => [lng, lat]), [f.coordinates[0][1], f.coordinates[0][0]]];
+          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "Polygon" as const, coordinates: [coords] } };
+        }
+      }),
+    };
+    if (format === "kml") {
+      const layer = { name: "Rysunki", geojson } as any;
+      // Reuse the KML export from Sidebar's exportKml logic
+      const features = geojson.features.map((f) => {
+        const coords = (f.geometry as any).coordinates;
+        const name = f.properties?.name || "";
+        if (f.geometry.type === "Point") return `<Placemark><name>${name}</name><Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
+        if (f.geometry.type === "LineString") { const c = coords.map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${name}</name><LineString><coordinates>${c}</coordinates></LineString></Placemark>`; }
+        if (f.geometry.type === "Polygon") { const c = coords[0].map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${name}</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`; }
+        return "";
+      }).join("\n");
+      const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rysunki</name>\n${features}\n</Document></kml>`;
+      const blob = new Blob([kmlStr], { type: "application/vnd.google-earth.kml+xml" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "rysunki.kml"; a.click();
+    } else if (format === "dxf") {
+      exportDxf(geojson, "rysunki");
+    } else if (format === "geojson") {
+      exportGeoJson(geojson, "rysunki");
+    } else {
+      exportTxtFile(geojson, "rysunki");
+    }
+  }, [drawnFeatures]);
+
   return (
     <div
       className="relative flex h-screen w-screen overflow-hidden bg-background"
@@ -206,8 +302,11 @@ const Index = () => {
         event.preventDefault();
         const files = event.dataTransfer.files;
         if (!files.length) return;
-        if (files[0].name.match(/\.(kml|kmz)$/i)) {
+        const name = files[0].name.toLowerCase();
+        if (name.match(/\.(kml|kmz)$/)) {
           handleImportKml(files[0]);
+        } else if (name.match(/\.(dxf|shp|zip|txt|csv)$/)) {
+          handleImportVector(files[0]);
         } else {
           startImport(files);
         }
@@ -267,6 +366,13 @@ const Index = () => {
           onClearMeasurement={handleClearMeasurement}
           onCheckCoverage={handleCheckCoverage}
           coverageResults={coverageResults}
+          drawMode={drawMode}
+          drawnFeatures={drawnFeatures}
+          onImportVector={handleImportVector}
+          onDrawModeChange={handleDrawModeChange}
+          onRemoveDrawnFeature={(id) => setDrawnFeatures((prev) => prev.filter((f) => f.id !== id))}
+          onClearDrawnFeatures={() => setDrawnFeatures([])}
+          onExportDrawnFeatures={handleExportDrawnFeatures}
         />
       </div>
 
@@ -299,8 +405,15 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
-          onMapClick={(lat, lng) => setClickedCoords({ lat, lng })}
+          onMapClick={(lat, lng) => {
+            setClickedCoords({ lat, lng });
+            handleMapClickForDrawing(lat, lng);
+          }}
+          onMapDblClick={handleMapDblClickForDrawing}
           coverageGaps={coverageGaps}
+          drawnFeatures={drawnFeatures}
+          drawingPoints={drawingPoints}
+          drawMode={drawMode}
         />
 
         {/* AGL prompt dialog */}
