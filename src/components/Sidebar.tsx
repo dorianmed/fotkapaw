@@ -222,14 +222,46 @@ const Sidebar = ({
         </CardContent>
       </Card>
 
-      {/* KML */}
+      {/* Warstwy wektorowe */}
       <Card>
         <CardHeader className="px-4 pb-2 pt-4">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <Layers className="h-4 w-4" /> Warstwy KML
+            <Layers className="h-4 w-4" /> Warstwy wektorowe
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 px-4 pb-4">
+          <label className="block">
+            <input
+              type="file"
+              accept=".kml,.kmz"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files) Array.from(files).forEach((f) => onImportKml(f));
+                e.target.value = "";
+              }}
+            />
+            <Button variant="outline" className="w-full" asChild>
+              <span><Upload className="mr-2 h-4 w-4" /> Importuj KML</span>
+            </Button>
+          </label>
+          <label className="block">
+            <input
+              type="file"
+              accept=".dxf,.shp,.zip,.txt,.csv"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files) Array.from(files).forEach((f) => onImportVector(f));
+                e.target.value = "";
+              }}
+            />
+            <Button variant="outline" className="w-full" asChild>
+              <span><FileText className="mr-2 h-4 w-4" /> Importuj DXF / SHP / TXT</span>
+            </Button>
+          </label>
           <label className="block">
             <input
               type="file"
