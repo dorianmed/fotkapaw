@@ -351,6 +351,57 @@ const Sidebar = ({
         </CardContent>
       </Card>
 
+      {/* Rysowanie */}
+      <Card>
+        <CardHeader className="px-4 pb-2 pt-4">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <PenTool className="h-4 w-4" /> Rysowanie
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 px-4 pb-4">
+          <div className="grid grid-cols-4 gap-1">
+            <Button variant={drawMode === "none" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("none")} title="Wyłącz">
+              <MousePointer className="h-3 w-3" />
+            </Button>
+            <Button variant={drawMode === "point" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("point")} title="Punkt">
+              <CircleDot className="h-3 w-3" />
+            </Button>
+            <Button variant={drawMode === "line" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("line")} title="Linia">
+              <Minus className="h-3 w-3" />
+            </Button>
+            <Button variant={drawMode === "polygon" ? "default" : "outline"} size="sm" onClick={() => onDrawModeChange("polygon")} title="Powierzchnia">
+              <Square className="h-3 w-3" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {drawMode === "point" && "Klikaj na mapie żeby dodać punkty."}
+            {drawMode === "line" && "Klikaj na mapie, dblklik kończy linię."}
+            {drawMode === "polygon" && "Klikaj na mapie, dblklik zamyka poligon."}
+            {drawMode === "none" && "Wybierz narzędzie rysowania."}
+          </p>
+          {drawnFeatures.length > 0 && (
+            <div className="space-y-1">
+              <Badge variant="secondary">{drawnFeatures.length} obiektów</Badge>
+              {drawnFeatures.map((f) => (
+                <div key={f.id} className="flex items-center justify-between text-xs rounded border px-2 py-1">
+                  <span className="truncate text-foreground">{f.name}</span>
+                  <Button variant="ghost" size="sm" onClick={() => onRemoveDrawnFeature(f.id)}><Trash2 className="h-3 w-3" /></Button>
+                </div>
+              ))}
+              <div className="grid grid-cols-2 gap-1 pt-1">
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("kml")}>Export KML</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("dxf")}>Export DXF</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("geojson")}>Export GeoJSON</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => onExportDrawnFeatures("txt")}>Export TXT</Button>
+              </div>
+              <Button variant="ghost" size="sm" className="w-full text-xs" onClick={onClearDrawnFeatures}>
+                <Trash2 className="mr-1 h-3 w-3" /> Wyczyść wszystko
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Podkład */}
       <Card>
         <CardHeader className="px-4 pb-2 pt-4">
