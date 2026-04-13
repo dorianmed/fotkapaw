@@ -204,6 +204,97 @@ const Index = () => {
     }
   }, [kmlLayers, photos]);
 
+  const handleImportVector = useCallback(async (file: File) => {
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      let geojson: GeoJSON.FeatureCollection;
+      if (ext === "dxf") {
+        geojson = await importDxf(file);
+      } else if (ext === "shp" || ext === "zip") {
+        geojson = await importShp(file);
+      } else if (ext === "txt" || ext === "csv") {
+        geojson = importTxt(await file.text());
+      } else {
+        toast.error(`Nieobsługiwany format: .${ext}`);
+        return;
+      }
+      if (geojson.features.length === 0) {
+        toast.warning("Brak obiektów w pliku");
+        return;
+      }
+      setKmlLayers((prev) => [
+        ...prev,
+        { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, geojson },
+      ]);
+      toast.success(`Zaimportowano ${geojson.features.length} obiektów z ${file.name}`);
+    } catch (err) {
+      toast.error(`Błąd importu: ${(err as Error).message}`);
+    }
+  }, []);
+
+  const handleDrawModeChange = useCallback((mode: DrawMode) => {
+    setDrawMode(mode);
+    setDrawingPoints([]);
+  }, []);
+
+  const handleMapClickForDrawing = useCallback((lat: number, lng: number) => {
+    if (drawMode === "point") {
+      const id = `draw-${Date.now()}`;
+      setDrawnFeatures((prev) => [...prev, { id, type: "point", coordinates: [[lat, lng]], name: `Punkt ${prev.filter(f => f.type === "point").length + 1}`, color: "#ef4444" }]);
+    } else if (drawMode === "line" || drawMode === "polygon") {
+      setDrawingPoints((prev) => [...prev, [lat, lng]]);
+    }
+  }, [drawMode]);
+
+  const handleMapDblClickForDrawing = useCallback(() => {
+    if (drawMode === "line" && drawingPoints.length >= 2) {
+      const id = `draw-${Date.now()}`;
+      setDrawnFeatures((prev) => [...prev, { id, type: "line", coordinates: drawingPoints, name: `Linia ${prev.filter(f => f.type === "line").length + 1}`, color: "#3b82f6" }]);
+      setDrawingPoints([]);
+    } else if (drawMode === "polygon" && drawingPoints.length >= 3) {
+      const id = `draw-${Date.now()}`;
+      setDrawnFeatures((prev) => [...prev, { id, type: "polygon", coordinates: drawingPoints, name: `Poligon ${prev.filter(f => f.type === "polygon").length + 1}`, color: "#22c55e" }]);
+      setDrawingPoints([]);
+    }
+  }, [drawMode, drawingPoints]);
+
+  const handleExportDrawnFeatures = useCallback((format: "kml" | "dxf" | "geojson" | "txt") => {
+    const geojson: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: drawnFeatures.map((f) => {
+        if (f.type === "point") {
+          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "Point" as const, coordinates: [f.coordinates[0][1], f.coordinates[0][0]] } };
+        } else if (f.type === "line") {
+          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => [lng, lat]) } };
+        } else {
+          const coords = [...f.coordinates.map(([lat, lng]) => [lng, lat]), [f.coordinates[0][1], f.coordinates[0][0]]];
+          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "Polygon" as const, coordinates: [coords] } };
+        }
+      }),
+    };
+    if (format === "kml") {
+      const layer = { name: "Rysunki", geojson } as any;
+      // Reuse the KML export from Sidebar's exportKml logic
+      const features = geojson.features.map((f) => {
+        const coords = (f.geometry as any).coordinates;
+        const name = f.properties?.name || "";
+        if (f.geometry.type === "Point") return `<Placemark><name>${name}</name><Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
+        if (f.geometry.type === "LineString") { const c = coords.map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${name}</name><LineString><coordinates>${c}</coordinates></LineString></Placemark>`; }
+        if (f.geometry.type === "Polygon") { const c = coords[0].map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${name}</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`; }
+        return "";
+      }).join("\n");
+      const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rysunki</name>\n${features}\n</Document></kml>`;
+      const blob = new Blob([kmlStr], { type: "application/vnd.google-earth.kml+xml" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "rysunki.kml"; a.click();
+    } else if (format === "dxf") {
+      exportDxf(geojson, "rysunki");
+    } else if (format === "geojson") {
+      exportGeoJson(geojson, "rysunki");
+    } else {
+      exportTxtFile(geojson, "rysunki");
+    }
+  }, [drawnFeatures]);
+
   return (
     <div
       className="relative flex h-screen w-screen overflow-hidden bg-background"
