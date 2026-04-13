@@ -181,8 +181,9 @@ const MapView = ({
   useEffect(() => {
     measureModeRef.current = measureMode;
     onMapClickRef.current = onMapClick;
+    onMapDblClickRef.current = onMapDblClick;
     snapTargetsRef.current = createPhotoSnapTargets(photos);
-  }, [measureMode, onMapClick, photos]);
+  }, [measureMode, onMapClick, onMapDblClick, photos]);
 
   useEffect(() => {
     resetMeasurement();
