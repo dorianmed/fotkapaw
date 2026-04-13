@@ -405,8 +405,15 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
-          onMapClick={(lat, lng) => setClickedCoords({ lat, lng })}
+          onMapClick={(lat, lng) => {
+            setClickedCoords({ lat, lng });
+            handleMapClickForDrawing(lat, lng);
+          }}
+          onMapDblClick={handleMapDblClickForDrawing}
           coverageGaps={coverageGaps}
+          drawnFeatures={drawnFeatures}
+          drawingPoints={drawingPoints}
+          drawMode={drawMode}
         />
 
         {/* AGL prompt dialog */}
