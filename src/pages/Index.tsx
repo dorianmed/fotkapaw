@@ -302,8 +302,11 @@ const Index = () => {
         event.preventDefault();
         const files = event.dataTransfer.files;
         if (!files.length) return;
-        if (files[0].name.match(/\.(kml|kmz)$/i)) {
+        const name = files[0].name.toLowerCase();
+        if (name.match(/\.(kml|kmz)$/)) {
           handleImportKml(files[0]);
+        } else if (name.match(/\.(dxf|shp|zip|txt|csv)$/)) {
+          handleImportVector(files[0]);
         } else {
           startImport(files);
         }
