@@ -5,6 +5,7 @@ import { FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint }
 import { findOverlappingPhotos } from "@/lib/photoUtils";
 import { calcPolygonArea, calcPolylineDistance, createPhotoSnapTargets, findNearestSnapTarget } from "@/lib/measurementUtils";
 import { CoverageResult } from "@/lib/coverageUtils";
+import { DrawMode, DrawnFeature } from "@/types/drawing";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
