@@ -38,6 +38,9 @@ const Index = () => {
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
+  const [drawMode, setDrawMode] = useState<DrawMode>("none");
+  const [drawnFeatures, setDrawnFeatures] = useState<DrawnFeature[]>([]);
+  const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
   const selectedOverlapStats = useMemo(
