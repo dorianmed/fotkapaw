@@ -419,6 +419,42 @@ const MapView = ({
     gapGroup.addTo(map);
   }, [coverageGaps]);
 
+  // Drawing layer
+  useEffect(() => {
+    const layer = drawingLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    // Render completed features
+    drawnFeatures.forEach((f) => {
+      if (f.type === "point" && f.coordinates.length > 0) {
+        const [lat, lng] = f.coordinates[0];
+        L.circleMarker([lat, lng], { radius: 6, color: f.color, fillColor: f.color, fillOpacity: 0.8, weight: 2 })
+          .bindTooltip(f.name, { direction: "top", offset: [0, -8] })
+          .addTo(layer);
+      } else if (f.type === "line" && f.coordinates.length >= 2) {
+        L.polyline(f.coordinates, { color: f.color, weight: 3 })
+          .bindTooltip(f.name, { direction: "top" })
+          .addTo(layer);
+      } else if (f.type === "polygon" && f.coordinates.length >= 3) {
+        L.polygon(f.coordinates, { color: f.color, fillColor: f.color, fillOpacity: 0.2, weight: 2 })
+          .bindTooltip(f.name, { direction: "center" })
+          .addTo(layer);
+      }
+    });
+
+    // Render in-progress drawing
+    if (drawingPoints.length > 0) {
+      const color = drawMode === "line" ? "#3b82f6" : "#22c55e";
+      drawingPoints.forEach(([lat, lng]) => {
+        L.circleMarker([lat, lng], { radius: 4, color, fillColor: color, fillOpacity: 1, weight: 2 }).addTo(layer);
+      });
+      if (drawingPoints.length >= 2) {
+        L.polyline(drawingPoints, { color, weight: 2, dashArray: "6 4" }).addTo(layer);
+      }
+    }
+  }, [drawnFeatures, drawingPoints, drawMode]);
+
   return <div ref={containerRef} className="h-full w-full" />;
 };
 
