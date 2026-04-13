@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
+import { DrawMode, DrawnFeature } from "@/types/drawing";
+import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
