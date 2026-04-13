@@ -143,7 +143,7 @@ const MapView = ({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current, { zoomControl: false }).setView([52.0, 19.0], 6);
+    const map = L.map(containerRef.current, { zoomControl: false, doubleClickZoom: false }).setView([52.0, 19.0], 6);
     L.control.zoom({ position: "topright" }).addTo(map);
     mapRef.current = map;
     measurementLayerRef.current = L.layerGroup().addTo(map);
