@@ -71,7 +71,9 @@ const MapView = ({
   const measurementPointsRef = useRef<[number, number][]>([]);
   const measureModeRef = useRef<MeasureMode>(measureMode);
   const onMapClickRef = useRef(onMapClick);
+  const onMapDblClickRef = useRef(onMapDblClick);
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
+  const drawingLayerRef = useRef<L.LayerGroup | null>(null);
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
