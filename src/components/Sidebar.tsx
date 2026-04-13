@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SearchBar from "@/components/SearchBar";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, OverlapStats, PhotoPoint, SensorConfig } from "@/types/photo";
-import { BarChart3, Camera, Download, FolderOpen, Layers, Map, MoveHorizontal, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck } from "lucide-react";
+import { BarChart3, Camera, Download, FileText, FolderOpen, Layers, Map, MousePointer, MoveHorizontal, Pencil, PenTool, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck, Square, Minus, CircleDot } from "lucide-react";
 import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
+import { DrawMode, DrawnFeature } from "@/types/drawing";
+import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
 
 interface SidebarProps {
   photos: PhotoPoint[];
@@ -24,8 +26,11 @@ interface SidebarProps {
   selectedOverlapStats: OverlapStats | null;
   measureMode: MeasureMode;
   measurement: MeasurementSummary | null;
+  drawMode: DrawMode;
+  drawnFeatures: DrawnFeature[];
   onImportPhotos: (files: FileList) => void;
   onImportKml: (file: File) => void;
+  onImportVector: (file: File) => void;
   onToggleFootprints: (value: boolean) => void;
   onFootprintStyleChange: (style: FootprintStyle) => void;
   onToggleOverlap: (value: boolean) => void;
@@ -43,6 +48,10 @@ interface SidebarProps {
   onClearMeasurement: () => void;
   onCheckCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
+  onDrawModeChange: (mode: DrawMode) => void;
+  onRemoveDrawnFeature: (id: string) => void;
+  onClearDrawnFeatures: () => void;
+  onExportDrawnFeatures: (format: "kml" | "dxf" | "geojson" | "txt") => void;
 }
 
 const exportKml = (layer: KmlLayer) => {
