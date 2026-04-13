@@ -160,12 +160,19 @@ const MapView = ({
       addMeasurementPoint(event.latlng.lat, event.latlng.lng);
     };
 
+    const handleMapDblClick = (event: L.LeafletMouseEvent) => {
+      onMapDblClickRef.current?.();
+      L.DomEvent.stop(event);
+    };
+
     window.addEventListener("zoom-to-bounds", handleZoom);
     map.on("click", handleMapClick);
+    map.on("dblclick", handleMapDblClick);
 
     return () => {
       window.removeEventListener("zoom-to-bounds", handleZoom);
       map.off("click", handleMapClick);
+      map.off("dblclick", handleMapDblClick);
       map.remove();
       mapRef.current = null;
     };
