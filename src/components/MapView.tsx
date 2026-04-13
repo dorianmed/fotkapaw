@@ -147,6 +147,7 @@ const MapView = ({
     L.control.zoom({ position: "topright" }).addTo(map);
     mapRef.current = map;
     measurementLayerRef.current = L.layerGroup().addTo(map);
+    drawingLayerRef.current = L.layerGroup().addTo(map);
 
     const handleZoom = (event: Event) => {
       const bounds = (event as CustomEvent).detail.bounds;
