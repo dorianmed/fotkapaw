@@ -163,9 +163,14 @@ const Sidebar = ({
           </Button>
         </label>
         <label className="block">
-          <input type="file" /* @ts-ignore */ webkitdirectory="" directory="" multiple
-            accept="image/jpeg,image/jpg,image/tiff" className="hidden"
-            onChange={(e) => e.target.files && onImportPhotos(e.target.files)} />
+          <input
+            type="file"
+            multiple
+            accept="image/jpeg,image/jpg,image/tiff"
+            className="hidden"
+            {...({ webkitdirectory: "", directory: "" } as any)}
+            onChange={(e) => e.target.files && onImportPhotos(e.target.files)}
+          />
           <Button variant="outline" className="w-full" asChild>
             <span><FolderOpen className="mr-2 h-4 w-4" /> Importuj folder</span>
           </Button>
