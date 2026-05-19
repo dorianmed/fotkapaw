@@ -11,11 +11,14 @@ import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
-import { DrawMode, DrawnFeature } from "@/types/drawing";
+import { DrawingLayer } from "@/types/drawing";
 import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
+
+const LAYER_COLORS = { point: "#ef4444", line: "#3b82f6", polygon: "#22c55e" } as const;
 
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -38,9 +41,16 @@ const Index = () => {
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
-  const [drawMode, setDrawMode] = useState<DrawMode>("none");
-  const [drawnFeatures, setDrawnFeatures] = useState<DrawnFeature[]>([]);
+
+  // Drawing layer model
+  const [drawingLayers, setDrawingLayers] = useState<DrawingLayer[]>([]);
+  const [activeDrawLayerId, setActiveDrawLayerId] = useState<string | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
+  const [selectedFeature, setSelectedFeature] = useState<{ layerId: string; featureId: string } | null>(null);
+
+  const activeDrawLayer = useMemo(() => drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null, [drawingLayers, activeDrawLayerId]);
+  const drawMode = activeDrawLayer?.type ?? "none";
+
   const overlapStats = useMemo(() => analyzeOverlap(photos), [photos]);
   const selectedPhotos = useMemo(() => photos.filter((photo) => selectedPhotoIds.includes(photo.id)), [photos, selectedPhotoIds]);
   const selectedOverlapStats = useMemo(
@@ -48,67 +58,42 @@ const Index = () => {
     [selectedPhotos]
   );
 
-  const startImport = useCallback((files: FileList) => {
-    setPendingFiles(files);
-    setShowAglPrompt(true);
-  }, []);
+  const startImport = useCallback((files: FileList) => { setPendingFiles(files); setShowAglPrompt(true); }, []);
 
   const processImport = useCallback(async (files: FileList, userAgl: number) => {
     const newPhotos: PhotoPoint[] = [];
     let noGps = 0;
     const total = files.length;
-
     setImportProgress({ current: 0, total });
 
     for (let i = 0; i < total; i++) {
       const file = files[i];
       try {
         const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
-        if (!exif?.latitude || !exif?.longitude) {
-          noGps++;
-          setImportProgress({ current: i + 1, total });
-          continue;
-        }
+        if (!exif?.latitude || !exif?.longitude) { noGps++; setImportProgress({ current: i + 1, total }); continue; }
 
         const estimated = estimateSensorDimensions(exif);
         const altitudeAGL = userAgl;
-
         const currentSensor: SensorConfig = {
-          resolutionX: estimated.resX,
-          resolutionY: estimated.resY,
-          sensorWidth: estimated.width,
-          sensorHeight: estimated.height,
-          focalLength: estimated.focal,
-          flightAltitude: altitudeAGL,
+          resolutionX: estimated.resX, resolutionY: estimated.resY,
+          sensorWidth: estimated.width, sensorHeight: estimated.height,
+          focalLength: estimated.focal, flightAltitude: altitudeAGL,
         };
-
         const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
         const longSide = Math.max(groundWidth, groundHeight);
         const shortSide = Math.min(groundWidth, groundHeight);
 
         newPhotos.push({
           id: `${file.name}-${Date.now()}-${Math.random()}`,
-          filename: file.name,
-          lat: exif.latitude,
-          lng: exif.longitude,
+          filename: file.name, lat: exif.latitude, lng: exif.longitude,
           altitude: exif.GPSAltitude,
           timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
-          footprintWidth: longSide,
-          footprintHeight: shortSide,
-          footprintCorners: [],
+          footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
           gsd: calcGSD(currentSensor, altitudeAGL),
-          sensorInfo: {
-            sensorWidth: estimated.width,
-            sensorHeight: estimated.height,
-            focalLength: estimated.focal,
-            resolutionX: estimated.resX,
-            source: estimated.source,
-          },
+          sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
           thumbnailUrl: URL.createObjectURL(file),
         });
-      } catch {
-        noGps++;
-      }
+      } catch { noGps++; }
       setImportProgress({ current: i + 1, total });
     }
 
@@ -123,11 +108,7 @@ const Index = () => {
       });
       toast.success(`Zaimportowano ${newPhotos.length} zdjęć`);
     }
-
-    if (noGps > 0) {
-      toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
-    }
-
+    if (noGps > 0) toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
     setImportProgress(null);
   }, []);
 
@@ -142,32 +123,19 @@ const Index = () => {
   const handleImportKml = useCallback(async (file: File) => {
     try {
       const geojson = kml(new DOMParser().parseFromString(await file.text(), "text/xml"));
-      setKmlLayers((prev) => [
-        ...prev,
-        { id: `kml-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#e11d48", weight: 2, geojson: geojson as any },
-      ]);
+      setKmlLayers((prev) => [...prev, { id: `kml-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#e11d48", weight: 2, geojson: geojson as any }]);
       toast.success(`Dodano KML: ${file.name}`);
-    } catch {
-      toast.error("Błąd KML");
-    }
+    } catch { toast.error("Błąd KML"); }
   }, []);
 
   const handlePhotoSelect = useCallback((id: string | null, ctrlKey: boolean) => {
-    if (!id) {
-      setSelectedPhotoIds([]);
-      return;
-    }
-    if (ctrlKey) {
-      setSelectedPhotoIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
-      return;
-    }
+    if (!id) { setSelectedPhotoIds([]); return; }
+    if (ctrlKey) { setSelectedPhotoIds((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id])); return; }
     setSelectedPhotoIds((prev) => (prev.length === 1 && prev[0] === id ? [] : [id]));
   }, []);
 
   const handleSearchResult = useCallback((lat: number, lng: number) => {
-    window.dispatchEvent(new CustomEvent("zoom-to-bounds", {
-      detail: { bounds: L.latLngBounds([[lat - 0.01, lng - 0.01], [lat + 0.01, lng + 0.01]]) },
-    }));
+    window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds: L.latLngBounds([[lat - 0.01, lng - 0.01], [lat + 0.01, lng + 0.01]]) } }));
   }, []);
 
   const handleZoomToPhotos = useCallback(() => {
@@ -177,123 +145,137 @@ const Index = () => {
   }, [photos]);
 
   const handleMeasureModeChange = useCallback((mode: MeasureMode) => {
-    setMeasureMode(mode);
-    setMeasurement(null);
-    setMeasurementResetSignal((value) => value + 1);
+    setMeasureMode(mode); setMeasurement(null); setMeasurementResetSignal((v) => v + 1);
   }, []);
 
-  const handleClearMeasurement = useCallback(() => {
-    setMeasurement(null);
-    setMeasurementResetSignal((value) => value + 1);
-  }, []);
+  const handleClearMeasurement = useCallback(() => { setMeasurement(null); setMeasurementResetSignal((v) => v + 1); }, []);
 
   const handleCheckCoverage = useCallback((kmlId: string) => {
     const layer = kmlLayers.find((l) => l.id === kmlId);
     if (!layer) return;
-    if (photos.length === 0) {
-      toast.warning("Brak zdjęć do analizy pokrycia");
-      return;
-    }
+    if (photos.length === 0) { toast.warning("Brak zdjęć do analizy pokrycia"); return; }
     const result = analyzeCoverage(layer, photos);
     setCoverageResults((prev) => ({ ...prev, [kmlId]: result }));
     setCoverageGaps(result.gaps);
-    if (result.coveragePercent >= 95) {
-      toast.success(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — obszar w pełni pokryty`);
-    } else {
-      toast.warning(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — wykryto luki`);
-    }
+    if (result.coveragePercent >= 95) toast.success(`Pokrycie: ${result.coveragePercent.toFixed(1)}%`);
+    else toast.warning(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — wykryto luki`);
   }, [kmlLayers, photos]);
 
   const handleImportVector = useCallback(async (file: File) => {
     try {
       const ext = file.name.split(".").pop()?.toLowerCase();
       let geojson: GeoJSON.FeatureCollection;
-      if (ext === "dxf") {
-        geojson = await importDxf(file);
-      } else if (ext === "shp" || ext === "zip") {
-        geojson = await importShp(file);
-      } else if (ext === "txt" || ext === "csv") {
-        geojson = importTxt(await file.text());
-      } else {
-        toast.error(`Nieobsługiwany format: .${ext}`);
-        return;
-      }
-      if (geojson.features.length === 0) {
-        toast.warning("Brak obiektów w pliku");
-        return;
-      }
-      setKmlLayers((prev) => [
-        ...prev,
-        { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, geojson },
-      ]);
-      toast.success(`Zaimportowano ${geojson.features.length} obiektów z ${file.name}`);
-    } catch (err) {
-      toast.error(`Błąd importu: ${(err as Error).message}`);
-    }
+      if (ext === "dxf") geojson = await importDxf(file);
+      else if (ext === "shp" || ext === "zip") geojson = await importShp(file);
+      else if (ext === "txt" || ext === "csv") geojson = importTxt(await file.text());
+      else { toast.error(`Nieobsługiwany format: .${ext}`); return; }
+      if (geojson.features.length === 0) { toast.warning("Brak obiektów w pliku"); return; }
+      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, geojson }]);
+      toast.success(`Zaimportowano ${geojson.features.length} obiektów`);
+    } catch (err) { toast.error(`Błąd importu: ${(err as Error).message}`); }
   }, []);
 
-  const handleDrawModeChange = useCallback((mode: DrawMode) => {
-    setDrawMode(mode);
+  // ---- Drawing layer handlers ----
+  const handleAddDrawLayer = useCallback((type: "point" | "line" | "polygon") => {
+    const id = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const sameTypeCount = drawingLayers.filter((l) => l.type === type).length + 1;
+    const typeName = type === "point" ? "Punktowa" : type === "line" ? "Liniowa" : "Powierzchniowa";
+    const newLayer: DrawingLayer = { id, name: `${typeName} ${sameTypeCount}`, type, visible: true, color: LAYER_COLORS[type], features: [] };
+    setDrawingLayers((prev) => [...prev, newLayer]);
+    setActiveDrawLayerId(id);
     setDrawingPoints([]);
-  }, []);
+  }, [drawingLayers]);
+
+  const handleSetActiveDrawLayer = useCallback((id: string | null) => { setActiveDrawLayerId(id); setDrawingPoints([]); }, []);
+  const handleToggleDrawLayer = useCallback((id: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, visible: !l.visible } : l)), []);
+  const handleRemoveDrawLayer = useCallback((id: string) => {
+    setDrawingLayers((prev) => prev.filter((l) => l.id !== id));
+    if (activeDrawLayerId === id) setActiveDrawLayerId(null);
+    if (selectedFeature?.layerId === id) setSelectedFeature(null);
+  }, [activeDrawLayerId, selectedFeature]);
+  const handleRenameDrawLayer = useCallback((id: string, name: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, name } : l)), []);
+  const handleChangeDrawLayerColor = useCallback((id: string, color: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, color } : l)), []);
 
   const handleMapClickForDrawing = useCallback((lat: number, lng: number) => {
-    if (drawMode === "point") {
-      const id = `draw-${Date.now()}`;
-      setDrawnFeatures((prev) => [...prev, { id, type: "point", coordinates: [[lat, lng]], name: `Punkt ${prev.filter(f => f.type === "point").length + 1}`, color: "#ef4444" }]);
-    } else if (drawMode === "line" || drawMode === "polygon") {
+    if (!activeDrawLayer) return;
+    if (activeDrawLayer.type === "point") {
+      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
+        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: [[lat, lng]], attrs: { name: `Punkt ${l.features.length + 1}`, description: "" } }],
+      }));
+    } else {
       setDrawingPoints((prev) => [...prev, [lat, lng]]);
     }
-  }, [drawMode]);
+  }, [activeDrawLayer]);
 
   const handleMapDblClickForDrawing = useCallback(() => {
-    if (drawMode === "line" && drawingPoints.length >= 2) {
-      const id = `draw-${Date.now()}`;
-      setDrawnFeatures((prev) => [...prev, { id, type: "line", coordinates: drawingPoints, name: `Linia ${prev.filter(f => f.type === "line").length + 1}`, color: "#3b82f6" }]);
+    if (!activeDrawLayer) return;
+    if (activeDrawLayer.type === "line" && drawingPoints.length >= 2) {
+      const coords = drawingPoints;
+      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
+        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: coords, attrs: { name: `Linia ${l.features.length + 1}`, description: "" } }],
+      }));
       setDrawingPoints([]);
-    } else if (drawMode === "polygon" && drawingPoints.length >= 3) {
-      const id = `draw-${Date.now()}`;
-      setDrawnFeatures((prev) => [...prev, { id, type: "polygon", coordinates: drawingPoints, name: `Poligon ${prev.filter(f => f.type === "polygon").length + 1}`, color: "#22c55e" }]);
+    } else if (activeDrawLayer.type === "polygon" && drawingPoints.length >= 3) {
+      const coords = drawingPoints;
+      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
+        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: coords, attrs: { name: `Poligon ${l.features.length + 1}`, description: "" } }],
+      }));
       setDrawingPoints([]);
     }
-  }, [drawMode, drawingPoints]);
+  }, [activeDrawLayer, drawingPoints]);
 
-  const handleExportDrawnFeatures = useCallback((format: "kml" | "dxf" | "geojson" | "txt") => {
-    const geojson: GeoJSON.FeatureCollection = {
-      type: "FeatureCollection",
-      features: drawnFeatures.map((f) => {
-        if (f.type === "point") {
-          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "Point" as const, coordinates: [f.coordinates[0][1], f.coordinates[0][0]] } };
-        } else if (f.type === "line") {
-          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => [lng, lat]) } };
-        } else {
-          const coords = [...f.coordinates.map(([lat, lng]) => [lng, lat]), [f.coordinates[0][1], f.coordinates[0][0]]];
-          return { type: "Feature" as const, properties: { name: f.name }, geometry: { type: "Polygon" as const, coordinates: [coords] } };
-        }
-      }),
-    };
+  const handleSelectFeature = useCallback((layerId: string, featureId: string) => setSelectedFeature({ layerId, featureId }), []);
+  const handleUpdateFeatureAttrs = useCallback((layerId: string, featureId: string, attrs: { name: string; description: string }) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : {
+      ...l, features: l.features.map((f) => f.id === featureId ? { ...f, attrs } : f),
+    }));
+  }, []);
+  const handleDeleteFeature = useCallback((layerId: string, featureId: string) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : { ...l, features: l.features.filter((f) => f.id !== featureId) }));
+    setSelectedFeature(null);
+  }, []);
+
+  const layerToGeoJson = useCallback((layer: DrawingLayer): GeoJSON.FeatureCollection => ({
+    type: "FeatureCollection",
+    features: layer.features.map((f) => {
+      const props = { name: f.attrs.name, description: f.attrs.description };
+      if (layer.type === "point") return { type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: [f.coordinates[0][1], f.coordinates[0][0]] } };
+      if (layer.type === "line") return { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => [lng, lat]) } };
+      const ring = [...f.coordinates.map(([lat, lng]) => [lng, lat]), [f.coordinates[0][1], f.coordinates[0][0]]];
+      return { type: "Feature" as const, properties: props, geometry: { type: "Polygon" as const, coordinates: [ring] } };
+    }),
+  }), []);
+
+  const handleExportDrawLayer = useCallback((id: string, format: "kml" | "dxf" | "geojson" | "txt") => {
+    const layer = drawingLayers.find((l) => l.id === id);
+    if (!layer || layer.features.length === 0) { toast.warning("Warstwa jest pusta"); return; }
+    const geojson = layerToGeoJson(layer);
+    const name = layer.name.replace(/\s+/g, "_");
     if (format === "kml") {
-      const layer = { name: "Rysunki", geojson } as any;
-      // Reuse the KML export from Sidebar's exportKml logic
-      const features = geojson.features.map((f) => {
+      const featuresKml = geojson.features.map((f) => {
         const coords = (f.geometry as any).coordinates;
-        const name = f.properties?.name || "";
-        if (f.geometry.type === "Point") return `<Placemark><name>${name}</name><Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
-        if (f.geometry.type === "LineString") { const c = coords.map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${name}</name><LineString><coordinates>${c}</coordinates></LineString></Placemark>`; }
-        if (f.geometry.type === "Polygon") { const c = coords[0].map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${name}</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`; }
+        const fname = f.properties?.name || "";
+        const desc = f.properties?.description ? `<description>${f.properties.description}</description>` : "";
+        if (f.geometry.type === "Point") return `<Placemark><name>${fname}</name>${desc}<Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
+        if (f.geometry.type === "LineString") { const c = coords.map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${fname}</name>${desc}<LineString><coordinates>${c}</coordinates></LineString></Placemark>`; }
+        if (f.geometry.type === "Polygon") { const c = coords[0].map((p: number[]) => `${p[0]},${p[1]},0`).join(" "); return `<Placemark><name>${fname}</name>${desc}<Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`; }
         return "";
       }).join("\n");
-      const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rysunki</name>\n${features}\n</Document></kml>`;
+      const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${name}</name>\n${featuresKml}\n</Document></kml>`;
       const blob = new Blob([kmlStr], { type: "application/vnd.google-earth.kml+xml" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "rysunki.kml"; a.click();
-    } else if (format === "dxf") {
-      exportDxf(geojson, "rysunki");
-    } else if (format === "geojson") {
-      exportGeoJson(geojson, "rysunki");
-    } else {
-      exportTxtFile(geojson, "rysunki");
-    }
-  }, [drawnFeatures]);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${name}.kml`; a.click();
+    } else if (format === "dxf") exportDxf(geojson, name);
+    else if (format === "geojson") exportGeoJson(geojson, name);
+    else exportTxtFile(geojson, name);
+  }, [drawingLayers, layerToGeoJson]);
+
+  const selectedFeatureData = useMemo(() => {
+    if (!selectedFeature) return null;
+    const layer = drawingLayers.find((l) => l.id === selectedFeature.layerId);
+    const feature = layer?.features.find((f) => f.id === selectedFeature.featureId);
+    if (!layer || !feature) return null;
+    return { layer, feature };
+  }, [selectedFeature, drawingLayers]);
 
   return (
     <div
@@ -303,22 +285,14 @@ const Index = () => {
         const files = event.dataTransfer.files;
         if (!files.length) return;
         const name = files[0].name.toLowerCase();
-        if (name.match(/\.(kml|kmz)$/)) {
-          handleImportKml(files[0]);
-        } else if (name.match(/\.(dxf|shp|zip|txt|csv)$/)) {
-          handleImportVector(files[0]);
-        } else {
-          startImport(files);
-        }
+        if (name.match(/\.(kml|kmz)$/)) handleImportKml(files[0]);
+        else if (name.match(/\.(dxf|shp|zip|txt|csv)$/)) handleImportVector(files[0]);
+        else startImport(files);
       }}
       onDragOver={(event) => event.preventDefault()}
     >
-      {/* Mobile overlay */}
       {isSidebarOpen && (
-        <div
-          className="fixed inset-0 z-[1100] bg-black/40 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
       <div className={`fixed z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:z-auto md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
@@ -335,8 +309,11 @@ const Index = () => {
           selectedOverlapStats={selectedOverlapStats}
           measureMode={measureMode}
           measurement={measurement}
+          drawingLayers={drawingLayers}
+          activeDrawLayerId={activeDrawLayerId}
           onImportPhotos={startImport}
           onImportKml={handleImportKml}
+          onImportVector={handleImportVector}
           onToggleFootprints={setShowFootprints}
           onFootprintStyleChange={setFootprintStyle}
           onToggleOverlap={setShowOverlapHeatmap}
@@ -349,46 +326,35 @@ const Index = () => {
             const layer = kmlLayers.find((item) => item.id === id);
             if (!layer) return;
             const bounds = L.geoJSON(layer.geojson).getBounds();
-            if (bounds.isValid()) {
-              window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
-            }
+            if (bounds.isValid()) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
           }}
           onSensorChange={setSensor}
-          onClearPhotos={() => {
-            setPhotos([]);
-            setSelectedPhotoIds([]);
-            setMeasurement(null);
-            setMeasurementResetSignal((value) => value + 1);
-          }}
+          onClearPhotos={() => { setPhotos([]); setSelectedPhotoIds([]); setMeasurement(null); setMeasurementResetSignal((v) => v + 1); }}
           onZoomToPhotos={handleZoomToPhotos}
           onSearchResult={handleSearchResult}
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
           onCheckCoverage={handleCheckCoverage}
           coverageResults={coverageResults}
-          drawMode={drawMode}
-          drawnFeatures={drawnFeatures}
-          onImportVector={handleImportVector}
-          onDrawModeChange={handleDrawModeChange}
-          onRemoveDrawnFeature={(id) => setDrawnFeatures((prev) => prev.filter((f) => f.id !== id))}
-          onClearDrawnFeatures={() => setDrawnFeatures([])}
-          onExportDrawnFeatures={handleExportDrawnFeatures}
+          onAddDrawLayer={handleAddDrawLayer}
+          onSetActiveDrawLayer={handleSetActiveDrawLayer}
+          onToggleDrawLayer={handleToggleDrawLayer}
+          onRemoveDrawLayer={handleRemoveDrawLayer}
+          onRenameDrawLayer={handleRenameDrawLayer}
+          onChangeDrawLayerColor={handleChangeDrawLayerColor}
+          onExportDrawLayer={handleExportDrawLayer}
+          onSelectFeature={handleSelectFeature}
         />
       </div>
 
       <div className="relative flex-1 w-full">
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute left-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden"
-        >
+        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute left-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden">
           {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
 
         {importProgress && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 w-72 rounded-lg border bg-card p-3 shadow-lg">
-            <p className="text-xs text-muted-foreground mb-2">
-              Przetwarzanie zdjęć: {importProgress.current}/{importProgress.total}
-            </p>
+            <p className="text-xs text-muted-foreground mb-2">Przetwarzanie zdjęć: {importProgress.current}/{importProgress.total}</p>
             <Progress value={(importProgress.current / importProgress.total) * 100} className="h-2" />
           </div>
         )}
@@ -405,48 +371,33 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
-          onMapClick={(lat, lng) => {
-            setClickedCoords({ lat, lng });
-            handleMapClickForDrawing(lat, lng);
-          }}
+          onMapClick={(lat, lng) => { setClickedCoords({ lat, lng }); handleMapClickForDrawing(lat, lng); }}
           onMapDblClick={handleMapDblClickForDrawing}
           coverageGaps={coverageGaps}
-          drawnFeatures={drawnFeatures}
+          drawingLayers={drawingLayers}
           drawingPoints={drawingPoints}
           drawMode={drawMode}
+          selectedFeatureId={selectedFeature?.featureId ?? null}
+          onFeatureClick={handleSelectFeature}
         />
 
-        {/* AGL prompt dialog */}
         {showAglPrompt && (
           <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/50">
             <div className="rounded-lg border bg-card p-6 shadow-xl w-80 space-y-4">
               <h3 className="text-sm font-bold text-foreground">Podaj wysokość lotu AGL</h3>
-              <p className="text-xs text-muted-foreground">
-                Wysokość nad terenem (Above Ground Level) w metrach. Jest potrzebna do poprawnego obliczenia zasięgów i GSD.
-              </p>
-              <Input
-                type="number"
-                step="0.1"
-                min="1"
-                placeholder="np. 100"
-                value={aglAltitude ?? ""}
-                onChange={(e) => setAglAltitude(parseFloat(e.target.value) || null)}
-                autoFocus
-                onKeyDown={(e) => e.key === "Enter" && handleAglConfirm()}
-              />
+              <p className="text-xs text-muted-foreground">Wysokość nad terenem w metrach.</p>
+              <Input type="number" step="0.1" min="1" placeholder="np. 100" value={aglAltitude ?? ""}
+                onChange={(e) => setAglAltitude(parseFloat(e.target.value) || null)} autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleAglConfirm()} />
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={handleAglConfirm} disabled={!aglAltitude || aglAltitude <= 0}>
-                  Importuj
-                </Button>
-                <Button variant="outline" onClick={() => { setShowAglPrompt(false); setPendingFiles(null); }}>
-                  Anuluj
-                </Button>
+                <Button className="flex-1" onClick={handleAglConfirm} disabled={!aglAltitude || aglAltitude <= 0}>Importuj</Button>
+                <Button variant="outline" onClick={() => { setShowAglPrompt(false); setPendingFiles(null); }}>Anuluj</Button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Coordinate display */}
+        {/* Coordinates panel */}
         {clickedCoords && (() => {
           const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
           return (
@@ -457,13 +408,9 @@ const Index = () => {
             >
               <div className="flex items-center gap-2 mb-1">
                 <Select value={coordSystem} onValueChange={(v) => setCoordSystem(v as CoordinateSystem)}>
-                  <SelectTrigger className="h-6 w-[130px] text-xs border-muted">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-6 w-[130px] text-xs border-muted"><SelectValue /></SelectTrigger>
                   <SelectContent className="z-[2000]">
-                    {COORDINATE_SYSTEMS.map((cs) => (
-                      <SelectItem key={cs.value} value={cs.value} className="text-xs">{cs.label}</SelectItem>
-                    ))}
+                    {COORDINATE_SYSTEMS.map((cs) => (<SelectItem key={cs.value} value={cs.value} className="text-xs">{cs.label}</SelectItem>))}
                   </SelectContent>
                 </Select>
                 <button onClick={() => setClickedCoords(null)} className="text-muted-foreground hover:text-foreground ml-1">✕</button>
@@ -475,6 +422,41 @@ const Index = () => {
             </div>
           );
         })()}
+
+        {/* Attributes panel for selected drawn feature */}
+        {selectedFeatureData && (
+          <div className="absolute right-4 top-4 z-[1000] w-72 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-foreground">Atrybuty obiektu</h3>
+              <button onClick={() => setSelectedFeature(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-2">Warstwa: {selectedFeatureData.layer.name} · {selectedFeatureData.layer.type}</p>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-0.5">Nazwa</label>
+                <Input className="h-7 text-xs" value={selectedFeatureData.feature.attrs.name}
+                  onChange={(e) => handleUpdateFeatureAttrs(selectedFeatureData.layer.id, selectedFeatureData.feature.id, { ...selectedFeatureData.feature.attrs, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-0.5">Opis</label>
+                <Textarea className="text-xs min-h-[60px]" value={selectedFeatureData.feature.attrs.description}
+                  onChange={(e) => handleUpdateFeatureAttrs(selectedFeatureData.layer.id, selectedFeatureData.feature.id, { ...selectedFeatureData.feature.attrs, description: e.target.value })} />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-0.5">Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.)</p>
+                <div className="max-h-32 overflow-y-auto rounded border bg-background p-1 font-mono text-[10px] leading-tight">
+                  {selectedFeatureData.feature.coordinates.map(([lat, lng], i) => (
+                    <div key={i}>{i + 1}: {lat.toFixed(6)}, {lng.toFixed(6)}</div>
+                  ))}
+                </div>
+              </div>
+              <Button variant="destructive" size="sm" className="w-full text-xs h-7"
+                onClick={() => handleDeleteFeature(selectedFeatureData.layer.id, selectedFeatureData.feature.id)}>
+                Usuń obiekt
+              </Button>
+            </div>
+          </div>
+        )}
 
         {!photos.length && !kmlLayers.length && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
