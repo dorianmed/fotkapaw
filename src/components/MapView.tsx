@@ -5,7 +5,7 @@ import { FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint }
 import { findOverlappingPhotos } from "@/lib/photoUtils";
 import { calcPolygonArea, calcPolylineDistance, createPhotoSnapTargets, findNearestSnapTarget } from "@/lib/measurementUtils";
 import { CoverageResult } from "@/lib/coverageUtils";
-import { DrawMode, DrawnFeature } from "@/types/drawing";
+import { DrawingLayer, DrawMode } from "@/types/drawing";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -33,9 +33,11 @@ interface MapViewProps {
   onMapClick?: (lat: number, lng: number) => void;
   onMapDblClick?: () => void;
   coverageGaps?: CoverageResult["gaps"];
-  drawnFeatures?: DrawnFeature[];
+  drawingLayers?: DrawingLayer[];
   drawingPoints?: [number, number][];
   drawMode?: DrawMode;
+  selectedFeatureId?: string | null;
+  onFeatureClick?: (layerId: string, featureId: string) => void;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
@@ -59,9 +61,11 @@ const MapView = ({
   onMapClick,
   onMapDblClick,
   coverageGaps = [],
-  drawnFeatures = [],
+  drawingLayers = [],
   drawingPoints = [],
   drawMode = "none",
+  selectedFeatureId = null,
+  onFeatureClick,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -295,7 +299,6 @@ const MapView = ({
         }
       });
 
-      // Only show footprints when toggle is ON
       if (showFootprints && photo.footprintCorners.length === 4) {
         const color = isSelected
           ? "hsl(210, 100%, 50%)"
@@ -388,7 +391,6 @@ const MapView = ({
     });
   }, [kmlLayers]);
 
-  // Coverage gaps visualization
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -407,43 +409,63 @@ const MapView = ({
           [gap.lat - gap.latSize / 2, gap.lng - gap.lngSize / 2],
           [gap.lat + gap.latSize / 2, gap.lng + gap.lngSize / 2],
         ],
-        {
-          color: "red",
-          fillColor: "red",
-          fillOpacity: 0.35,
-          weight: 0.5,
-        }
+        { color: "red", fillColor: "red", fillOpacity: 0.35, weight: 0.5 }
       ).addTo(gapGroup);
     });
 
     gapGroup.addTo(map);
   }, [coverageGaps]);
 
-  // Drawing layer
+  // Drawing layers
   useEffect(() => {
     const layer = drawingLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
 
-    // Render completed features
-    drawnFeatures.forEach((f) => {
-      if (f.type === "point" && f.coordinates.length > 0) {
-        const [lat, lng] = f.coordinates[0];
-        L.circleMarker([lat, lng], { radius: 6, color: f.color, fillColor: f.color, fillOpacity: 0.8, weight: 2 })
-          .bindTooltip(f.name, { direction: "top", offset: [0, -8] })
-          .addTo(layer);
-      } else if (f.type === "line" && f.coordinates.length >= 2) {
-        L.polyline(f.coordinates, { color: f.color, weight: 3 })
-          .bindTooltip(f.name, { direction: "top" })
-          .addTo(layer);
-      } else if (f.type === "polygon" && f.coordinates.length >= 3) {
-        L.polygon(f.coordinates, { color: f.color, fillColor: f.color, fillOpacity: 0.2, weight: 2 })
-          .bindTooltip(f.name, { direction: "center" })
-          .addTo(layer);
-      }
+    drawingLayers.forEach((dl) => {
+      if (!dl.visible) return;
+      dl.features.forEach((f) => {
+        const isSelected = selectedFeatureId === f.id;
+        const weight = isSelected ? 4 : 2;
+        const tooltip = f.attrs.name || dl.name;
+        const handleClick = (e: L.LeafletMouseEvent) => {
+          if (measureModeRef.current !== "none") return;
+          L.DomEvent.stop(e);
+          onFeatureClick?.(dl.id, f.id);
+        };
+
+        if (dl.type === "point" && f.coordinates.length > 0) {
+          const [lat, lng] = f.coordinates[0];
+          const m = L.circleMarker([lat, lng], {
+            radius: isSelected ? 8 : 6,
+            color: dl.color,
+            fillColor: dl.color,
+            fillOpacity: 0.85,
+            weight,
+          })
+            .bindTooltip(tooltip, { direction: "top", offset: [0, -8] })
+            .addTo(layer);
+          m.on("click", handleClick);
+        } else if (dl.type === "line" && f.coordinates.length >= 2) {
+          const m = L.polyline(f.coordinates, { color: dl.color, weight: weight + 1 })
+            .bindTooltip(tooltip, { direction: "top" })
+            .addTo(layer);
+          m.on("click", handleClick);
+        } else if (dl.type === "polygon" && f.coordinates.length >= 3) {
+          const m = L.polygon(f.coordinates, {
+            color: dl.color,
+            fillColor: dl.color,
+            fillOpacity: 0.2,
+            weight,
+          })
+            .bindTooltip(tooltip, { direction: "center" })
+            .addTo(layer);
+          m.on("click", handleClick);
+        }
+      });
     });
 
-    // Render in-progress drawing
+    // In-progress drawing
     if (drawingPoints.length > 0) {
       const color = drawMode === "line" ? "#3b82f6" : "#22c55e";
       drawingPoints.forEach(([lat, lng]) => {
@@ -453,7 +475,7 @@ const MapView = ({
         L.polyline(drawingPoints, { color, weight: 2, dashArray: "6 4" }).addTo(layer);
       }
     }
-  }, [drawnFeatures, drawingPoints, drawMode]);
+  }, [drawingLayers, drawingPoints, drawMode, selectedFeatureId, onFeatureClick]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 };
