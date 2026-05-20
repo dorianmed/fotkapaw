@@ -22,7 +22,7 @@ interface SidebarProps {
   showFootprints: boolean;
   footprintStyle: FootprintStyle;
   showOverlapHeatmap: boolean;
-  baseLayer: "osm" | "google";
+  baseLayer: "osm" | "google" | "sentinel";
   overlapStats: OverlapStats;
   selectedPhotoCount: number;
   selectedOverlapStats: OverlapStats | null;
