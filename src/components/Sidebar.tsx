@@ -442,14 +442,6 @@ const Sidebar = ({
         </Section>
       )}
 
-      <Section icon={<Camera className="h-4 w-4" />} title="Pułap awaryjny" description="Używany gdy EXIF nie ma wysokości GPS.">
-        <div className="flex items-center gap-2">
-          <Label className="flex-1 text-xs text-foreground">Pułap lotu (m)</Label>
-          <Input type="number" step="0.1" className="h-8 w-28 text-xs"
-            value={sensor.flightAltitude}
-            onChange={(e) => onSensorChange({ ...sensor, flightAltitude: parseFloat(e.target.value) || 0 })} />
-        </div>
-      </Section>
     </div>
   );
 };
