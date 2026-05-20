@@ -445,6 +445,8 @@ const Index = () => {
           footprintStyle={footprintStyle}
           showOverlapHeatmap={showOverlapHeatmap}
           baseLayer={baseLayer}
+          wmsUrl={wmsUrl}
+          wmsLayer={wmsSelectedLayer}
           selectedPhotoIds={selectedPhotoIds}
           onPhotoSelect={handlePhotoSelect}
           measureMode={measureMode}
