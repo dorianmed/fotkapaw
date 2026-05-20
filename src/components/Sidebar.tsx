@@ -254,9 +254,17 @@ const Sidebar = ({
             </div>
             {photos.length > 0 && (
               <div className="space-y-1">
-                <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => onCheckCoverage(layer.id)}>
-                  <ShieldCheck className="mr-1 h-3 w-3" /> Sprawdź pokrycie
-                </Button>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onCheckCoverage(layer.id)}>
+                    <ShieldCheck className="mr-1 h-3 w-3" /> Sprawdź pokrycie
+                  </Button>
+                  {coverageResults[layer.id] && (
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Usuń luki z mapy"
+                      onClick={() => onClearCoverage(layer.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
                 {coverageResults[layer.id] && (() => {
                   const r = coverageResults[layer.id];
                   const color = r.coveragePercent >= 95 ? "text-green-600" : r.coveragePercent >= 80 ? "text-yellow-600" : "text-red-600";
