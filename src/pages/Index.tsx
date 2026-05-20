@@ -28,7 +28,11 @@ const Index = () => {
   const [showFootprints, setShowFootprints] = useState(true);
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
-  const [baseLayer, setBaseLayer] = useState<"osm" | "google" | "sentinel">("osm");
+  const [baseLayer, setBaseLayer] = useState<"osm" | "google" | "wms">("osm");
+  const [wmsUrl, setWmsUrl] = useState<string>("https://sh.dataspace.copernicus.eu/ogc/wms/2a3dca8e-5210-4752-ba0f-cd3300dee17d");
+  const [wmsLayers, setWmsLayers] = useState<string[]>([]);
+  const [wmsSelectedLayer, setWmsSelectedLayer] = useState<string | null>(null);
+  const [wmsLoading, setWmsLoading] = useState(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [measureMode, setMeasureMode] = useState<MeasureMode>("none");
   const [measurement, setMeasurement] = useState<MeasurementSummary | null>(null);
