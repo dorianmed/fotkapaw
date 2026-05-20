@@ -212,22 +212,35 @@ const Index = () => {
         ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: [[lat, lng]], attrs: { name: `Punkt ${l.features.length + 1}`, description: "" } }],
       }));
     } else {
-      setDrawingPoints((prev) => [...prev, [lat, lng]]);
+      setDrawingPoints((prev) => {
+        // auto-close polygon: click near first vertex
+        if (activeDrawLayer.type === "polygon" && prev.length >= 3) {
+          const [flat, flng] = prev[0];
+          const dLat = (flat - lat) * 111000;
+          const dLng = (flng - lng) * 111000 * Math.cos((lat * Math.PI) / 180);
+          if (Math.sqrt(dLat * dLat + dLng * dLng) < 8) {
+            // trigger finalize in next tick
+            setTimeout(() => finalizeDrawingNow(), 0);
+            return prev;
+          }
+        }
+        return [...prev, [lat, lng]];
+      });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDrawLayer]);
 
   const finalizeDrawingNow = useCallback(() => {
     const layer = activeDrawLayer;
     if (!layer) return;
     setDrawingPoints((points) => {
-      // dedupe consecutive duplicate vertices (dblclick fires 2 clicks at same spot)
       const cleaned: [number, number][] = [];
       for (const p of points) {
         const last = cleaned[cleaned.length - 1];
         if (!last || last[0] !== p[0] || last[1] !== p[1]) cleaned.push(p);
       }
       const minPts = layer.type === "line" ? 2 : 3;
-      if (cleaned.length < minPts) return points;
+      if (cleaned.length < minPts) return [];
       const baseName = layer.type === "line" ? "Linia" : "Poligon";
       setDrawingLayers((prev) => prev.map((l) => l.id !== layer.id ? l : {
         ...l, features: [...l.features, {
@@ -244,6 +257,41 @@ const Index = () => {
     if (!activeDrawLayer || activeDrawLayer.type === "point") return;
     finalizeDrawingNow();
   }, [activeDrawLayer, finalizeDrawingNow]);
+
+  // ESC: finalize in-progress drawing and deactivate layer (exit drawing mode)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (drawingPoints.length > 0) finalizeDrawingNow();
+      if (activeDrawLayerId) setActiveDrawLayerId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeDrawLayerId, drawingPoints.length, finalizeDrawingNow]);
+
+  const handleLoadWmsLayers = useCallback(async () => {
+    if (!wmsUrl) return;
+    setWmsLoading(true);
+    try {
+      const u = wmsUrl + (wmsUrl.includes("?") ? "&" : "?") + "SERVICE=WMS&REQUEST=GetCapabilities";
+      const res = await fetch(u);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      const doc = new DOMParser().parseFromString(text, "text/xml");
+      const names = Array.from(doc.getElementsByTagName("Layer"))
+        .map((n) => n.getElementsByTagName("Name")[0]?.textContent ?? "")
+        .filter(Boolean);
+      const unique = Array.from(new Set(names));
+      if (unique.length === 0) { toast.warning("Brak warstw w GetCapabilities"); return; }
+      setWmsLayers(unique);
+      setWmsSelectedLayer((prev) => prev && unique.includes(prev) ? prev : unique[0]);
+      toast.success(`Pobrano ${unique.length} warstw WMS`);
+    } catch (err) {
+      toast.error(`Błąd WMS: ${(err as Error).message} (CORS?)`);
+    } finally {
+      setWmsLoading(false);
+    }
+  }, [wmsUrl]);
 
   const handleSelectFeature = useCallback((layerId: string, featureId: string) => setSelectedFeature({ layerId, featureId }), []);
   const handleUpdateFeatureAttrs = useCallback((layerId: string, featureId: string, attrs: { name: string; description: string }) => {
