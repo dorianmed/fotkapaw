@@ -28,7 +28,7 @@ const Index = () => {
   const [showFootprints, setShowFootprints] = useState(true);
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
-  const [baseLayer, setBaseLayer] = useState<"osm" | "google">("osm");
+  const [baseLayer, setBaseLayer] = useState<"osm" | "google" | "sentinel">("osm");
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [measureMode, setMeasureMode] = useState<MeasureMode>("none");
   const [measurement, setMeasurement] = useState<MeasurementSummary | null>(null);
