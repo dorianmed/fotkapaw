@@ -133,6 +133,8 @@ const Sidebar = ({
 }: SidebarProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [expandedFeatureLists, setExpandedFeatureLists] = useState<Record<string, boolean>>({});
+  const activeLayer = drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null;
+  const drawMode = activeLayer?.type ?? "none";
 
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
