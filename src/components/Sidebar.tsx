@@ -22,7 +22,14 @@ interface SidebarProps {
   showFootprints: boolean;
   footprintStyle: FootprintStyle;
   showOverlapHeatmap: boolean;
-  baseLayer: "osm" | "google" | "sentinel";
+  baseLayer: "osm" | "google" | "wms";
+  wmsUrl: string;
+  wmsLayers: string[];
+  wmsSelectedLayer: string | null;
+  wmsLoading: boolean;
+  onWmsUrlChange: (url: string) => void;
+  onWmsLoadLayers: () => void;
+  onWmsLayerChange: (layer: string) => void;
   overlapStats: OverlapStats;
   selectedPhotoCount: number;
   selectedOverlapStats: OverlapStats | null;
@@ -36,7 +43,7 @@ interface SidebarProps {
   onToggleFootprints: (value: boolean) => void;
   onFootprintStyleChange: (style: FootprintStyle) => void;
   onToggleOverlap: (value: boolean) => void;
-  onBaseLayerChange: (value: "osm" | "google" | "sentinel") => void;
+  onBaseLayerChange: (value: "osm" | "google" | "wms") => void;
   onToggleKmlLayer: (id: string) => void;
   onRemoveKmlLayer: (id: string) => void;
   onChangeKmlColor: (id: string, color: string) => void;
@@ -120,6 +127,8 @@ const Section = ({ icon, title, description, defaultOpen = false, children }: {
 
 const Sidebar = ({
   photos, kmlLayers, sensor, showFootprints, footprintStyle, showOverlapHeatmap, baseLayer,
+  wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
+  onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
   overlapStats, selectedPhotoCount, selectedOverlapStats, measureMode, measurement,
   drawingLayers, activeDrawLayerId,
   onImportPhotos, onImportKml, onImportVector,
@@ -298,7 +307,9 @@ const Sidebar = ({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          {activeDrawLayerId ? "Klikaj na mapie. Linie/poligony: dblklik LUB przycisk Zakończ." : "Wybierz warstwę aby aktywować rysowanie."}
+          {activeDrawLayerId
+            ? "Klikaj na mapie. Linie/poligony: dblklik, klik na 1. wierzchołek lub przycisk Zakończ. ESC = wyjście."
+            : "Wybierz warstwę aby aktywować rysowanie."}
         </p>
         {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
           <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
@@ -382,10 +393,32 @@ const Sidebar = ({
         <div className="grid grid-cols-3 gap-1">
           <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
           <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("google")}>Google</Button>
-          <Button variant={baseLayer === "sentinel" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("sentinel")}>Sentinel</Button>
+          <Button variant={baseLayer === "wms" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("wms")}>WMS</Button>
         </div>
-        {baseLayer === "sentinel" && (
-          <p className="text-[10px] text-muted-foreground">Sentinel Hub (Copernicus) — TRUE_COLOR. Dane © Copernicus.</p>
+        {baseLayer === "wms" && (
+          <div className="space-y-1 rounded border p-2">
+            <Label className="text-[10px] text-muted-foreground">Adres WMS (GetCapabilities)</Label>
+            <Input className="h-7 text-xs font-mono" value={wmsUrl}
+              onChange={(e) => onWmsUrlChange(e.target.value)} placeholder="https://.../wms" />
+            <Button size="sm" variant="outline" className="w-full h-7 text-xs"
+              onClick={onWmsLoadLayers} disabled={!wmsUrl || wmsLoading}>
+              {wmsLoading ? "Pobieranie..." : "Pobierz warstwy"}
+            </Button>
+            {wmsLayers.length > 0 && (
+              <div>
+                <Label className="text-[10px] text-muted-foreground">Warstwa ({wmsLayers.length})</Label>
+                <select
+                  className="w-full h-7 text-xs rounded border bg-background px-2"
+                  value={wmsSelectedLayer ?? ""}
+                  onChange={(e) => onWmsLayerChange(e.target.value)}
+                >
+                  <option value="" disabled>— wybierz —</option>
+                  {wmsLayers.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground">UWAGA: serwer WMS musi udostępniać CORS.</p>
+          </div>
         )}
         <div className="flex items-center justify-between">
           <Label className="text-xs text-foreground">Zasięgi zdjęć</Label>
@@ -442,14 +475,6 @@ const Sidebar = ({
         </Section>
       )}
 
-      <Section icon={<Camera className="h-4 w-4" />} title="Pułap awaryjny" description="Używany gdy EXIF nie ma wysokości GPS.">
-        <div className="flex items-center gap-2">
-          <Label className="flex-1 text-xs text-foreground">Pułap lotu (m)</Label>
-          <Input type="number" step="0.1" className="h-8 w-28 text-xs"
-            value={sensor.flightAltitude}
-            onChange={(e) => onSensorChange({ ...sensor, flightAltitude: parseFloat(e.target.value) || 0 })} />
-        </div>
-      </Section>
     </div>
   );
 };

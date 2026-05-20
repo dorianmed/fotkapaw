@@ -24,7 +24,9 @@ interface MapViewProps {
   showFootprints: boolean;
   footprintStyle: FootprintStyle;
   showOverlapHeatmap: boolean;
-  baseLayer: "osm" | "google" | "sentinel";
+  baseLayer: "osm" | "google" | "wms";
+  wmsUrl?: string;
+  wmsLayer?: string | null;
   selectedPhotoIds?: string[];
   onPhotoSelect?: (id: string | null, ctrlKey: boolean) => void;
   measureMode: MeasureMode;
@@ -53,6 +55,8 @@ const MapView = ({
   footprintStyle,
   showOverlapHeatmap,
   baseLayer,
+  wmsUrl,
+  wmsLayer,
   selectedPhotoIds = [],
   onPhotoSelect,
   measureMode,
@@ -204,20 +208,20 @@ const MapView = ({
       L.tileLayer("https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
         attribution: "© Google", maxZoom: 20,
       }).addTo(map);
-    } else if (baseLayer === "sentinel") {
-      L.tileLayer.wms("https://sh.dataspace.copernicus.eu/ogc/wms/2a3dca8e-5210-4752-ba0f-cd3300dee17d", {
-        layers: "TRUE_COLOR",
+    } else if (baseLayer === "wms" && wmsUrl && wmsLayer) {
+      L.tileLayer.wms(wmsUrl, {
+        layers: wmsLayer,
         format: "image/png",
         transparent: false,
-        attribution: "© Copernicus / Sentinel Hub",
-        maxZoom: 18,
+        attribution: "WMS",
+        maxZoom: 19,
       } as any).addTo(map);
     } else {
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors", maxZoom: 19,
       }).addTo(map);
     }
-  }, [baseLayer]);
+  }, [baseLayer, wmsUrl, wmsLayer]);
 
   useEffect(() => {
     const map = mapRef.current;
