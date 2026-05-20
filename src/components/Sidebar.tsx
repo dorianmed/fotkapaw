@@ -391,10 +391,32 @@ const Sidebar = ({
         <div className="grid grid-cols-3 gap-1">
           <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
           <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("google")}>Google</Button>
-          <Button variant={baseLayer === "sentinel" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("sentinel")}>Sentinel</Button>
+          <Button variant={baseLayer === "wms" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("wms")}>WMS</Button>
         </div>
-        {baseLayer === "sentinel" && (
-          <p className="text-[10px] text-muted-foreground">Sentinel Hub (Copernicus) — TRUE_COLOR. Dane © Copernicus.</p>
+        {baseLayer === "wms" && (
+          <div className="space-y-1 rounded border p-2">
+            <Label className="text-[10px] text-muted-foreground">Adres WMS (GetCapabilities)</Label>
+            <Input className="h-7 text-xs font-mono" value={wmsUrl}
+              onChange={(e) => onWmsUrlChange(e.target.value)} placeholder="https://.../wms" />
+            <Button size="sm" variant="outline" className="w-full h-7 text-xs"
+              onClick={onWmsLoadLayers} disabled={!wmsUrl || wmsLoading}>
+              {wmsLoading ? "Pobieranie..." : "Pobierz warstwy"}
+            </Button>
+            {wmsLayers.length > 0 && (
+              <div>
+                <Label className="text-[10px] text-muted-foreground">Warstwa ({wmsLayers.length})</Label>
+                <select
+                  className="w-full h-7 text-xs rounded border bg-background px-2"
+                  value={wmsSelectedLayer ?? ""}
+                  onChange={(e) => onWmsLayerChange(e.target.value)}
+                >
+                  <option value="" disabled>— wybierz —</option>
+                  {wmsLayers.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground">UWAGA: serwer WMS musi udostępniać CORS.</p>
+          </div>
         )}
         <div className="flex items-center justify-between">
           <Label className="text-xs text-foreground">Zasięgi zdjęć</Label>
