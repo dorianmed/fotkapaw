@@ -22,7 +22,7 @@ interface SidebarProps {
   showFootprints: boolean;
   footprintStyle: FootprintStyle;
   showOverlapHeatmap: boolean;
-  baseLayer: "osm" | "google";
+  baseLayer: "osm" | "google" | "sentinel";
   overlapStats: OverlapStats;
   selectedPhotoCount: number;
   selectedOverlapStats: OverlapStats | null;
@@ -36,7 +36,7 @@ interface SidebarProps {
   onToggleFootprints: (value: boolean) => void;
   onFootprintStyleChange: (style: FootprintStyle) => void;
   onToggleOverlap: (value: boolean) => void;
-  onBaseLayerChange: (value: "osm" | "google") => void;
+  onBaseLayerChange: (value: "osm" | "google" | "sentinel") => void;
   onToggleKmlLayer: (id: string) => void;
   onRemoveKmlLayer: (id: string) => void;
   onChangeKmlColor: (id: string, color: string) => void;
@@ -49,6 +49,7 @@ interface SidebarProps {
   onMeasureModeChange: (mode: MeasureMode) => void;
   onClearMeasurement: () => void;
   onCheckCoverage: (kmlId: string) => void;
+  onClearCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
   onAddDrawLayer: (type: "point" | "line" | "polygon") => void;
   onSetActiveDrawLayer: (id: string | null) => void;
@@ -58,6 +59,8 @@ interface SidebarProps {
   onChangeDrawLayerColor: (id: string, color: string) => void;
   onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt") => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
+  onFinishDrawing: () => void;
+  drawingInProgressCount: number;
 }
 
 const exportKml = (layer: KmlLayer) => {
@@ -123,11 +126,15 @@ const Sidebar = ({
   onToggleFootprints, onFootprintStyleChange, onToggleOverlap, onBaseLayerChange,
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
   onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
-  onMeasureModeChange, onClearMeasurement, onCheckCoverage, coverageResults,
+  onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
   onAddDrawLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
   onRenameDrawLayer, onChangeDrawLayerColor, onExportDrawLayer, onSelectFeature,
+  onFinishDrawing, drawingInProgressCount,
 }: SidebarProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [expandedFeatureLists, setExpandedFeatureLists] = useState<Record<string, boolean>>({});
+  const activeLayer = drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null;
+  const drawMode = activeLayer?.type ?? "none";
 
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
@@ -249,9 +256,17 @@ const Sidebar = ({
             </div>
             {photos.length > 0 && (
               <div className="space-y-1">
-                <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => onCheckCoverage(layer.id)}>
-                  <ShieldCheck className="mr-1 h-3 w-3" /> Sprawdź pokrycie
-                </Button>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onCheckCoverage(layer.id)}>
+                    <ShieldCheck className="mr-1 h-3 w-3" /> Sprawdź pokrycie
+                  </Button>
+                  {coverageResults[layer.id] && (
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Usuń luki z mapy"
+                      onClick={() => onClearCoverage(layer.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
                 {coverageResults[layer.id] && (() => {
                   const r = coverageResults[layer.id];
                   const color = r.coveragePercent >= 95 ? "text-green-600" : r.coveragePercent >= 80 ? "text-yellow-600" : "text-red-600";
@@ -283,8 +298,13 @@ const Sidebar = ({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          {activeDrawLayerId ? "Aktywna warstwa rysuje na mapie. Linie/poligony: dblklik kończy." : "Wybierz warstwę kliknięciem aby aktywować rysowanie."}
+          {activeDrawLayerId ? "Klikaj na mapie. Linie/poligony: dblklik LUB przycisk Zakończ." : "Wybierz warstwę aby aktywować rysowanie."}
         </p>
+        {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
+          <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
+            Zakończ ({drawingInProgressCount} pkt)
+          </Button>
+        )}
         {drawingLayers.length === 0 && (
           <p className="text-xs italic text-muted-foreground">Brak warstw. Kliknij + powyżej.</p>
         )}
@@ -321,17 +341,28 @@ const Sidebar = ({
               </div>
               <p className="text-[10px] text-muted-foreground pl-4">{typeLabel(dl.type)}</p>
               {dl.features.length > 0 && (
-                <div className="max-h-32 overflow-y-auto space-y-0.5 border-t pt-1">
-                  {dl.features.map((f, i) => (
-                    <button
-                      key={f.id}
-                      onClick={() => onSelectFeature(dl.id, f.id)}
-                      className="flex w-full items-center justify-between rounded px-1 py-0.5 text-[10px] hover:bg-muted text-left"
-                    >
-                      <span className="truncate text-foreground">{f.attrs.name || `${i + 1}`}</span>
-                      <span className="text-muted-foreground font-mono">{f.coordinates.length}</span>
-                    </button>
-                  ))}
+                <div className="border-t pt-1">
+                  <button
+                    onClick={() => setExpandedFeatureLists((p) => ({ ...p, [dl.id]: !p[dl.id] }))}
+                    className="flex w-full items-center justify-between text-[10px] text-muted-foreground hover:text-foreground px-1 py-0.5"
+                  >
+                    <span>Obiekty ({dl.features.length})</span>
+                    {expandedFeatureLists[dl.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  </button>
+                  {expandedFeatureLists[dl.id] && (
+                    <div className="max-h-32 overflow-y-auto space-y-0.5 mt-1">
+                      {dl.features.map((f, i) => (
+                        <button
+                          key={f.id}
+                          onClick={() => onSelectFeature(dl.id, f.id)}
+                          className="flex w-full items-center justify-between rounded px-1 py-0.5 text-[10px] hover:bg-muted text-left"
+                        >
+                          <span className="truncate text-foreground">{f.attrs.name || `${i + 1}`}</span>
+                          <span className="text-muted-foreground font-mono">{f.coordinates.length}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {dl.features.length > 0 && (
@@ -348,10 +379,14 @@ const Sidebar = ({
       </Section>
 
       <Section icon={<Map className="h-4 w-4" />} title="Podkład mapy" description="Wybierz mapę bazową i styl zasięgów.">
-        <div className="flex gap-2">
-          <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" className="flex-1" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
-          <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" className="flex-1" onClick={() => onBaseLayerChange("google")}>Google Sat</Button>
+        <div className="grid grid-cols-3 gap-1">
+          <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
+          <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("google")}>Google</Button>
+          <Button variant={baseLayer === "sentinel" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("sentinel")}>Sentinel</Button>
         </div>
+        {baseLayer === "sentinel" && (
+          <p className="text-[10px] text-muted-foreground">Sentinel Hub (Copernicus) — TRUE_COLOR. Dane © Copernicus.</p>
+        )}
         <div className="flex items-center justify-between">
           <Label className="text-xs text-foreground">Zasięgi zdjęć</Label>
           <Switch checked={showFootprints} onCheckedChange={onToggleFootprints} />

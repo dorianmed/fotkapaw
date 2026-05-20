@@ -28,7 +28,7 @@ const Index = () => {
   const [showFootprints, setShowFootprints] = useState(true);
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
-  const [baseLayer, setBaseLayer] = useState<"osm" | "google">("osm");
+  const [baseLayer, setBaseLayer] = useState<"osm" | "google" | "sentinel">("osm");
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [measureMode, setMeasureMode] = useState<MeasureMode>("none");
   const [measurement, setMeasurement] = useState<MeasurementSummary | null>(null);
@@ -161,6 +161,11 @@ const Index = () => {
     else toast.warning(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — wykryto luki`);
   }, [kmlLayers, photos]);
 
+  const handleClearCoverage = useCallback((kmlId: string) => {
+    setCoverageResults((prev) => { const next = { ...prev }; delete next[kmlId]; return next; });
+    setCoverageGaps([]);
+  }, []);
+
   const handleImportVector = useCallback(async (file: File) => {
     try {
       const ext = file.name.split(".").pop()?.toLowerCase();
@@ -207,22 +212,34 @@ const Index = () => {
     }
   }, [activeDrawLayer]);
 
+  const finalizeDrawingNow = useCallback(() => {
+    const layer = activeDrawLayer;
+    if (!layer) return;
+    setDrawingPoints((points) => {
+      // dedupe consecutive duplicate vertices (dblclick fires 2 clicks at same spot)
+      const cleaned: [number, number][] = [];
+      for (const p of points) {
+        const last = cleaned[cleaned.length - 1];
+        if (!last || last[0] !== p[0] || last[1] !== p[1]) cleaned.push(p);
+      }
+      const minPts = layer.type === "line" ? 2 : 3;
+      if (cleaned.length < minPts) return points;
+      const baseName = layer.type === "line" ? "Linia" : "Poligon";
+      setDrawingLayers((prev) => prev.map((l) => l.id !== layer.id ? l : {
+        ...l, features: [...l.features, {
+          id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          coordinates: cleaned,
+          attrs: { name: `${baseName} ${l.features.length + 1}`, description: "" },
+        }],
+      }));
+      return [];
+    });
+  }, [activeDrawLayer]);
+
   const handleMapDblClickForDrawing = useCallback(() => {
-    if (!activeDrawLayer) return;
-    if (activeDrawLayer.type === "line" && drawingPoints.length >= 2) {
-      const coords = drawingPoints;
-      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
-        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: coords, attrs: { name: `Linia ${l.features.length + 1}`, description: "" } }],
-      }));
-      setDrawingPoints([]);
-    } else if (activeDrawLayer.type === "polygon" && drawingPoints.length >= 3) {
-      const coords = drawingPoints;
-      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
-        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: coords, attrs: { name: `Poligon ${l.features.length + 1}`, description: "" } }],
-      }));
-      setDrawingPoints([]);
-    }
-  }, [activeDrawLayer, drawingPoints]);
+    if (!activeDrawLayer || activeDrawLayer.type === "point") return;
+    finalizeDrawingNow();
+  }, [activeDrawLayer, finalizeDrawingNow]);
 
   const handleSelectFeature = useCallback((layerId: string, featureId: string) => setSelectedFeature({ layerId, featureId }), []);
   const handleUpdateFeatureAttrs = useCallback((layerId: string, featureId: string, attrs: { name: string; description: string }) => {
@@ -335,6 +352,7 @@ const Index = () => {
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
           onCheckCoverage={handleCheckCoverage}
+          onClearCoverage={handleClearCoverage}
           coverageResults={coverageResults}
           onAddDrawLayer={handleAddDrawLayer}
           onSetActiveDrawLayer={handleSetActiveDrawLayer}
@@ -344,6 +362,8 @@ const Index = () => {
           onChangeDrawLayerColor={handleChangeDrawLayerColor}
           onExportDrawLayer={handleExportDrawLayer}
           onSelectFeature={handleSelectFeature}
+          onFinishDrawing={finalizeDrawingNow}
+          drawingInProgressCount={drawingPoints.length}
         />
       </div>
 
