@@ -22,7 +22,14 @@ interface SidebarProps {
   showFootprints: boolean;
   footprintStyle: FootprintStyle;
   showOverlapHeatmap: boolean;
-  baseLayer: "osm" | "google" | "sentinel";
+  baseLayer: "osm" | "google" | "wms";
+  wmsUrl: string;
+  wmsLayers: string[];
+  wmsSelectedLayer: string | null;
+  wmsLoading: boolean;
+  onWmsUrlChange: (url: string) => void;
+  onWmsLoadLayers: () => void;
+  onWmsLayerChange: (layer: string) => void;
   overlapStats: OverlapStats;
   selectedPhotoCount: number;
   selectedOverlapStats: OverlapStats | null;
