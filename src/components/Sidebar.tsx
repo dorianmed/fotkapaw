@@ -296,8 +296,13 @@ const Sidebar = ({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          {activeDrawLayerId ? "Aktywna warstwa rysuje na mapie. Linie/poligony: dblklik kończy." : "Wybierz warstwę kliknięciem aby aktywować rysowanie."}
+          {activeDrawLayerId ? "Klikaj na mapie. Linie/poligony: dblklik LUB przycisk Zakończ." : "Wybierz warstwę aby aktywować rysowanie."}
         </p>
+        {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
+          <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
+            Zakończ ({drawingInProgressCount} pkt)
+          </Button>
+        )}
         {drawingLayers.length === 0 && (
           <p className="text-xs italic text-muted-foreground">Brak warstw. Kliknij + powyżej.</p>
         )}
