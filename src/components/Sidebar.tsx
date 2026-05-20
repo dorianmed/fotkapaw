@@ -36,7 +36,7 @@ interface SidebarProps {
   onToggleFootprints: (value: boolean) => void;
   onFootprintStyleChange: (style: FootprintStyle) => void;
   onToggleOverlap: (value: boolean) => void;
-  onBaseLayerChange: (value: "osm" | "google") => void;
+  onBaseLayerChange: (value: "osm" | "google" | "sentinel") => void;
   onToggleKmlLayer: (id: string) => void;
   onRemoveKmlLayer: (id: string) => void;
   onChangeKmlColor: (id: string, color: string) => void;
