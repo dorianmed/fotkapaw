@@ -126,11 +126,13 @@ const Sidebar = ({
   onToggleFootprints, onFootprintStyleChange, onToggleOverlap, onBaseLayerChange,
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
   onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
-  onMeasureModeChange, onClearMeasurement, onCheckCoverage, coverageResults,
+  onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
   onAddDrawLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
   onRenameDrawLayer, onChangeDrawLayerColor, onExportDrawLayer, onSelectFeature,
+  onFinishDrawing, drawingInProgressCount,
 }: SidebarProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [expandedFeatureLists, setExpandedFeatureLists] = useState<Record<string, boolean>>({});
 
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
