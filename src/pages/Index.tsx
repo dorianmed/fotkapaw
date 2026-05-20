@@ -161,6 +161,11 @@ const Index = () => {
     else toast.warning(`Pokrycie: ${result.coveragePercent.toFixed(1)}% — wykryto luki`);
   }, [kmlLayers, photos]);
 
+  const handleClearCoverage = useCallback((kmlId: string) => {
+    setCoverageResults((prev) => { const next = { ...prev }; delete next[kmlId]; return next; });
+    setCoverageGaps([]);
+  }, []);
+
   const handleImportVector = useCallback(async (file: File) => {
     try {
       const ext = file.name.split(".").pop()?.toLowerCase();
