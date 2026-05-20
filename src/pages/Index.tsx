@@ -216,13 +216,19 @@ const Index = () => {
     const layer = activeDrawLayer;
     if (!layer) return;
     setDrawingPoints((points) => {
+      // dedupe consecutive duplicate vertices (dblclick fires 2 clicks at same spot)
+      const cleaned: [number, number][] = [];
+      for (const p of points) {
+        const last = cleaned[cleaned.length - 1];
+        if (!last || last[0] !== p[0] || last[1] !== p[1]) cleaned.push(p);
+      }
       const minPts = layer.type === "line" ? 2 : 3;
-      if (points.length < minPts) return points;
+      if (cleaned.length < minPts) return points;
       const baseName = layer.type === "line" ? "Linia" : "Poligon";
       setDrawingLayers((prev) => prev.map((l) => l.id !== layer.id ? l : {
         ...l, features: [...l.features, {
           id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          coordinates: points,
+          coordinates: cleaned,
           attrs: { name: `${baseName} ${l.features.length + 1}`, description: "" },
         }],
       }));
