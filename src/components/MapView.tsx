@@ -24,7 +24,9 @@ interface MapViewProps {
   showFootprints: boolean;
   footprintStyle: FootprintStyle;
   showOverlapHeatmap: boolean;
-  baseLayer: "osm" | "google" | "sentinel";
+  baseLayer: "osm" | "google" | "wms";
+  wmsUrl?: string;
+  wmsLayer?: string | null;
   selectedPhotoIds?: string[];
   onPhotoSelect?: (id: string | null, ctrlKey: boolean) => void;
   measureMode: MeasureMode;
