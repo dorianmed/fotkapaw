@@ -373,6 +373,13 @@ const Index = () => {
           footprintStyle={footprintStyle}
           showOverlapHeatmap={showOverlapHeatmap}
           baseLayer={baseLayer}
+          wmsUrl={wmsUrl}
+          wmsLayers={wmsLayers}
+          wmsSelectedLayer={wmsSelectedLayer}
+          wmsLoading={wmsLoading}
+          onWmsUrlChange={setWmsUrl}
+          onWmsLoadLayers={handleLoadWmsLayers}
+          onWmsLayerChange={setWmsSelectedLayer}
           overlapStats={overlapStats}
           selectedPhotoCount={selectedPhotoIds.length}
           selectedOverlapStats={selectedOverlapStats}
