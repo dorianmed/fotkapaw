@@ -204,6 +204,14 @@ const MapView = ({
       L.tileLayer("https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
         attribution: "© Google", maxZoom: 20,
       }).addTo(map);
+    } else if (baseLayer === "sentinel") {
+      L.tileLayer.wms("https://sh.dataspace.copernicus.eu/ogc/wms/2a3dca8e-5210-4752-ba0f-cd3300dee17d", {
+        layers: "TRUE_COLOR",
+        format: "image/png",
+        transparent: false,
+        attribution: "© Copernicus / Sentinel Hub",
+        maxZoom: 18,
+      } as any).addTo(map);
     } else {
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors", maxZoom: 19,
