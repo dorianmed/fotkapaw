@@ -307,7 +307,9 @@ const Sidebar = ({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          {activeDrawLayerId ? "Klikaj na mapie. Linie/poligony: dblklik LUB przycisk Zakończ." : "Wybierz warstwę aby aktywować rysowanie."}
+          {activeDrawLayerId
+            ? "Klikaj na mapie. Linie/poligony: dblklik, klik na 1. wierzchołek lub przycisk Zakończ. ESC = wyjście."
+            : "Wybierz warstwę aby aktywować rysowanie."}
         </p>
         {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
           <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
