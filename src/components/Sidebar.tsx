@@ -49,6 +49,7 @@ interface SidebarProps {
   onMeasureModeChange: (mode: MeasureMode) => void;
   onClearMeasurement: () => void;
   onCheckCoverage: (kmlId: string) => void;
+  onClearCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
   onAddDrawLayer: (type: "point" | "line" | "polygon") => void;
   onSetActiveDrawLayer: (id: string | null) => void;
@@ -58,6 +59,8 @@ interface SidebarProps {
   onChangeDrawLayerColor: (id: string, color: string) => void;
   onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt") => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
+  onFinishDrawing: () => void;
+  drawingInProgressCount: number;
 }
 
 const exportKml = (layer: KmlLayer) => {
