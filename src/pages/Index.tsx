@@ -346,6 +346,7 @@ const Index = () => {
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
           onCheckCoverage={handleCheckCoverage}
+          onClearCoverage={handleClearCoverage}
           coverageResults={coverageResults}
           onAddDrawLayer={handleAddDrawLayer}
           onSetActiveDrawLayer={handleSetActiveDrawLayer}
@@ -355,6 +356,8 @@ const Index = () => {
           onChangeDrawLayerColor={handleChangeDrawLayerColor}
           onExportDrawLayer={handleExportDrawLayer}
           onSelectFeature={handleSelectFeature}
+          onFinishDrawing={finalizeDrawingNow}
+          drawingInProgressCount={drawingPoints.length}
         />
       </div>
 
