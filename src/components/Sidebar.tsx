@@ -127,6 +127,8 @@ const Section = ({ icon, title, description, defaultOpen = false, children }: {
 
 const Sidebar = ({
   photos, kmlLayers, sensor, showFootprints, footprintStyle, showOverlapHeatmap, baseLayer,
+  wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
+  onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
   overlapStats, selectedPhotoCount, selectedOverlapStats, measureMode, measurement,
   drawingLayers, activeDrawLayerId,
   onImportPhotos, onImportKml, onImportVector,
