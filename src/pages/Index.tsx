@@ -212,22 +212,28 @@ const Index = () => {
     }
   }, [activeDrawLayer]);
 
+  const finalizeDrawingNow = useCallback(() => {
+    const layer = activeDrawLayer;
+    if (!layer) return;
+    setDrawingPoints((points) => {
+      const minPts = layer.type === "line" ? 2 : 3;
+      if (points.length < minPts) return points;
+      const baseName = layer.type === "line" ? "Linia" : "Poligon";
+      setDrawingLayers((prev) => prev.map((l) => l.id !== layer.id ? l : {
+        ...l, features: [...l.features, {
+          id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          coordinates: points,
+          attrs: { name: `${baseName} ${l.features.length + 1}`, description: "" },
+        }],
+      }));
+      return [];
+    });
+  }, [activeDrawLayer]);
+
   const handleMapDblClickForDrawing = useCallback(() => {
-    if (!activeDrawLayer) return;
-    if (activeDrawLayer.type === "line" && drawingPoints.length >= 2) {
-      const coords = drawingPoints;
-      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
-        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: coords, attrs: { name: `Linia ${l.features.length + 1}`, description: "" } }],
-      }));
-      setDrawingPoints([]);
-    } else if (activeDrawLayer.type === "polygon" && drawingPoints.length >= 3) {
-      const coords = drawingPoints;
-      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
-        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: coords, attrs: { name: `Poligon ${l.features.length + 1}`, description: "" } }],
-      }));
-      setDrawingPoints([]);
-    }
-  }, [activeDrawLayer, drawingPoints]);
+    if (!activeDrawLayer || activeDrawLayer.type === "point") return;
+    finalizeDrawingNow();
+  }, [activeDrawLayer, finalizeDrawingNow]);
 
   const handleSelectFeature = useCallback((layerId: string, featureId: string) => setSelectedFeature({ layerId, featureId }), []);
   const handleUpdateFeatureAttrs = useCallback((layerId: string, featureId: string, attrs: { name: string; description: string }) => {
