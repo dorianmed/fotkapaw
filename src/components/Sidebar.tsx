@@ -379,10 +379,14 @@ const Sidebar = ({
       </Section>
 
       <Section icon={<Map className="h-4 w-4" />} title="Podkład mapy" description="Wybierz mapę bazową i styl zasięgów.">
-        <div className="flex gap-2">
-          <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" className="flex-1" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
-          <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" className="flex-1" onClick={() => onBaseLayerChange("google")}>Google Sat</Button>
+        <div className="grid grid-cols-3 gap-1">
+          <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
+          <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("google")}>Google</Button>
+          <Button variant={baseLayer === "sentinel" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("sentinel")}>Sentinel</Button>
         </div>
+        {baseLayer === "sentinel" && (
+          <p className="text-[10px] text-muted-foreground">Sentinel Hub (Copernicus) — TRUE_COLOR. Dane © Copernicus.</p>
+        )}
         <div className="flex items-center justify-between">
           <Label className="text-xs text-foreground">Zasięgi zdjęć</Label>
           <Switch checked={showFootprints} onCheckedChange={onToggleFootprints} />
