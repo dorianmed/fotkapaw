@@ -341,17 +341,28 @@ const Sidebar = ({
               </div>
               <p className="text-[10px] text-muted-foreground pl-4">{typeLabel(dl.type)}</p>
               {dl.features.length > 0 && (
-                <div className="max-h-32 overflow-y-auto space-y-0.5 border-t pt-1">
-                  {dl.features.map((f, i) => (
-                    <button
-                      key={f.id}
-                      onClick={() => onSelectFeature(dl.id, f.id)}
-                      className="flex w-full items-center justify-between rounded px-1 py-0.5 text-[10px] hover:bg-muted text-left"
-                    >
-                      <span className="truncate text-foreground">{f.attrs.name || `${i + 1}`}</span>
-                      <span className="text-muted-foreground font-mono">{f.coordinates.length}</span>
-                    </button>
-                  ))}
+                <div className="border-t pt-1">
+                  <button
+                    onClick={() => setExpandedFeatureLists((p) => ({ ...p, [dl.id]: !p[dl.id] }))}
+                    className="flex w-full items-center justify-between text-[10px] text-muted-foreground hover:text-foreground px-1 py-0.5"
+                  >
+                    <span>Obiekty ({dl.features.length})</span>
+                    {expandedFeatureLists[dl.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  </button>
+                  {expandedFeatureLists[dl.id] && (
+                    <div className="max-h-32 overflow-y-auto space-y-0.5 mt-1">
+                      {dl.features.map((f, i) => (
+                        <button
+                          key={f.id}
+                          onClick={() => onSelectFeature(dl.id, f.id)}
+                          className="flex w-full items-center justify-between rounded px-1 py-0.5 text-[10px] hover:bg-muted text-left"
+                        >
+                          <span className="truncate text-foreground">{f.attrs.name || `${i + 1}`}</span>
+                          <span className="text-muted-foreground font-mono">{f.coordinates.length}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {dl.features.length > 0 && (
