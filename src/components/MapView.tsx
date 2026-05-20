@@ -55,6 +55,8 @@ const MapView = ({
   footprintStyle,
   showOverlapHeatmap,
   baseLayer,
+  wmsUrl,
+  wmsLayer,
   selectedPhotoIds = [],
   onPhotoSelect,
   measureMode,
