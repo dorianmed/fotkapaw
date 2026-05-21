@@ -245,8 +245,28 @@ const MapView = ({
     measureModeRef.current = measureMode;
     onMapClickRef.current = onMapClick;
     onMapDblClickRef.current = onMapDblClick;
-    snapTargetsRef.current = createPhotoSnapTargets(photos);
-  }, [measureMode, onMapClick, onMapDblClick, photos]);
+    baseLayerRef.current = baseLayer;
+    wmsUrlRef.current = wmsUrl;
+    wmsLayerNameRef.current = wmsLayer;
+    onWmsPixelInfoRef.current = onWmsPixelInfo;
+    // Build snap targets: photo centers/corners + drawing layer vertices
+    const photoTargets = createPhotoSnapTargets(photos);
+    const drawTargets = drawingLayers.flatMap((dl) =>
+      dl.visible
+        ? dl.features.flatMap((f) =>
+            f.coordinates.map(([lat, lng], i) => ({
+              id: `${dl.id}-${f.id}-${i}`,
+              lat,
+              lng,
+              label: `${dl.name} v${i + 1}`,
+              kind: "corner" as const,
+              photoId: "",
+            }))
+          )
+        : []
+    );
+    snapTargetsRef.current = [...photoTargets, ...drawTargets];
+  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers]);
 
   useEffect(() => {
     resetMeasurement();
