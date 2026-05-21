@@ -63,7 +63,37 @@ const Index = () => {
     [selectedPhotos]
   );
 
-  const startImport = useCallback((files: FileList) => { setPendingFiles(files); setShowAglPrompt(true); }, []);
+  const filterMultispectral = useCallback((files: FileList): { kept: File[]; total: number; isMS: boolean } => {
+    const all = Array.from(files);
+    let isMS = false;
+    // Drop DJI multispectral band TIFs (keep only _D.JPG)
+    const step1 = all.filter((f) => {
+      if (/_MS_(G|R|RE|NIR|B)\.tiff?$/i.test(f.name)) { isMS = true; return false; }
+      return true;
+    });
+    // For IMG_XXXX_N.* (N=1..10) keep only _1
+    const kept: File[] = [];
+    for (const f of step1) {
+      const m = f.name.match(/^(IMG_\d+)_(\d+)\.(jpe?g|tif|tiff)$/i);
+      if (m) {
+        isMS = true;
+        if (parseInt(m[2], 10) !== 1) continue;
+      }
+      kept.push(f);
+    }
+    return { kept, total: all.length, isMS };
+  }, []);
+
+  const startImport = useCallback((files: FileList) => {
+    const { kept, total, isMS } = filterMultispectral(files);
+    if (kept.length === 0) { toast.warning("Brak zdjęć do importu po filtracji"); return; }
+    if (isMS) toast.info(`Zdjęcia multispektralne: wczytuję ${kept.length} z ${total} plików`);
+    // Stash as FileList-like via DataTransfer
+    const dt = new DataTransfer();
+    kept.forEach((f) => dt.items.add(f));
+    setPendingFiles(dt.files);
+    setShowAglPrompt(true);
+  }, [filterMultispectral]);
 
   const processImport = useCallback(async (files: FileList, userAgl: number) => {
     const newPhotos: PhotoPoint[] = [];
