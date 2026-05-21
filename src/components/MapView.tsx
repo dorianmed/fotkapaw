@@ -71,6 +71,7 @@ const MapView = ({
   drawMode = "none",
   selectedFeatureId = null,
   onFeatureClick,
+  onWmsPixelInfo,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,6 +84,10 @@ const MapView = ({
   const onMapDblClickRef = useRef(onMapDblClick);
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
   const drawingLayerRef = useRef<L.LayerGroup | null>(null);
+  const baseLayerRef = useRef(baseLayer);
+  const wmsUrlRef = useRef(wmsUrl);
+  const wmsLayerNameRef = useRef(wmsLayer);
+  const onWmsPixelInfoRef = useRef(onWmsPixelInfo);
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
