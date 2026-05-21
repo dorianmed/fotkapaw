@@ -45,6 +45,7 @@ const Index = () => {
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
+  const [wmsPixelInfo, setWmsPixelInfo] = useState<{ layer: string; info: string } | null>(null);
 
   // Drawing layer model
   const [drawingLayers, setDrawingLayers] = useState<DrawingLayer[]>([]);
