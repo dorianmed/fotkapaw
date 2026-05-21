@@ -547,7 +547,17 @@ const MapView = ({
           })
             .bindTooltip(tooltip, { direction: "center" })
             .addTo(layer);
-          m.on("click", handleClick);
+          m.on("click", (e) => {
+            if (measureModeRef.current !== "none") {
+              const pts = f.coordinates.map(([lat, lng]) => ({ lat, lng }));
+              const area = calcPolygonArea(pts);
+              const perim = calcPolylineDistance([...pts, pts[0]]);
+              onMeasurementChange?.({ distanceMeters: perim, areaSquareMeters: area, pointCount: pts.length });
+              L.DomEvent.stop(e);
+              return;
+            }
+            handleClick(e);
+          });
         }
       });
     });
