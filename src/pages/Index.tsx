@@ -531,6 +531,11 @@ const Index = () => {
               <div className="font-mono leading-relaxed">
                 <div>{coords.line1}</div>
                 <div>{coords.line2}</div>
+                {wmsPixelInfo && (
+                  <div className="mt-1 pt-1 border-t text-[11px] text-primary break-all">
+                    <span className="text-muted-foreground">{wmsPixelInfo.layer}:</span> {wmsPixelInfo.info}
+                  </div>
+                )}
               </div>
             </div>
           );
