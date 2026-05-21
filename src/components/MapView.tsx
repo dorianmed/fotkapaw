@@ -170,8 +170,14 @@ const MapView = ({
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
       onMapClickRef.current?.(event.latlng.lat, event.latlng.lng);
-      if (measureModeRef.current === "none") return;
-      addMeasurementPoint(event.latlng.lat, event.latlng.lng);
+      if (measureModeRef.current !== "none") {
+        addMeasurementPoint(event.latlng.lat, event.latlng.lng);
+        return;
+      }
+      // WMS GetFeatureInfo
+      if (baseLayerRef.current === "wms" && wmsUrlRef.current && wmsLayerNameRef.current) {
+        fetchWmsInfo(event);
+      }
     };
 
     const handleMapDblClick = (event: L.LeafletMouseEvent) => {
