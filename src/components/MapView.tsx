@@ -154,6 +154,49 @@ const MapView = ({
     return true;
   };
 
+  const fetchWmsInfo = async (event: L.LeafletMouseEvent) => {
+    const map = mapRef.current;
+    const url = wmsUrlRef.current;
+    const layerName = wmsLayerNameRef.current;
+    if (!map || !url || !layerName) return;
+    const size = map.getSize();
+    const bounds = map.getBounds();
+    const point = map.latLngToContainerPoint(event.latlng);
+    const params = new URLSearchParams({
+      SERVICE: "WMS",
+      VERSION: "1.1.1",
+      REQUEST: "GetFeatureInfo",
+      LAYERS: layerName,
+      QUERY_LAYERS: layerName,
+      BBOX: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
+      WIDTH: String(size.x),
+      HEIGHT: String(size.y),
+      SRS: "EPSG:4326",
+      X: String(Math.round(point.x)),
+      Y: String(Math.round(point.y)),
+      INFO_FORMAT: "application/json",
+      FEATURE_COUNT: "1",
+    });
+    try {
+      const reqUrl = url + (url.includes("?") ? "&" : "?") + params.toString();
+      const res = await fetch(reqUrl);
+      const text = await res.text();
+      let value = "";
+      try {
+        const json = JSON.parse(text);
+        const props = json.features?.[0]?.properties;
+        if (props && Object.keys(props).length) {
+          value = Object.entries(props).map(([k, v]) => `${k}=${typeof v === "number" ? (v as number).toFixed(3) : v}`).join(", ");
+        }
+      } catch {
+        value = text.replace(/<[^>]+>/g, " ").trim().slice(0, 200);
+      }
+      onWmsPixelInfoRef.current?.(layerName, value || "brak danych");
+    } catch {
+      onWmsPixelInfoRef.current?.(layerName, "błąd (CORS?)");
+    }
+  };
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
