@@ -40,6 +40,7 @@ interface MapViewProps {
   drawMode?: DrawMode;
   selectedFeatureId?: string | null;
   onFeatureClick?: (layerId: string, featureId: string) => void;
+  onWmsPixelInfo?: (layerName: string, info: string) => void;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
