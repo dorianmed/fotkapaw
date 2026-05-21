@@ -45,6 +45,7 @@ const Index = () => {
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
+  const [wmsPixelInfo, setWmsPixelInfo] = useState<{ layer: string; info: string } | null>(null);
 
   // Drawing layer model
   const [drawingLayers, setDrawingLayers] = useState<DrawingLayer[]>([]);
@@ -62,7 +63,37 @@ const Index = () => {
     [selectedPhotos]
   );
 
-  const startImport = useCallback((files: FileList) => { setPendingFiles(files); setShowAglPrompt(true); }, []);
+  const filterMultispectral = useCallback((files: FileList): { kept: File[]; total: number; isMS: boolean } => {
+    const all = Array.from(files);
+    let isMS = false;
+    // Drop DJI multispectral band TIFs (keep only _D.JPG)
+    const step1 = all.filter((f) => {
+      if (/_MS_(G|R|RE|NIR|B)\.tiff?$/i.test(f.name)) { isMS = true; return false; }
+      return true;
+    });
+    // For IMG_XXXX_N.* (N=1..10) keep only _1
+    const kept: File[] = [];
+    for (const f of step1) {
+      const m = f.name.match(/^(IMG_\d+)_(\d+)\.(jpe?g|tif|tiff)$/i);
+      if (m) {
+        isMS = true;
+        if (parseInt(m[2], 10) !== 1) continue;
+      }
+      kept.push(f);
+    }
+    return { kept, total: all.length, isMS };
+  }, []);
+
+  const startImport = useCallback((files: FileList) => {
+    const { kept, total, isMS } = filterMultispectral(files);
+    if (kept.length === 0) { toast.warning("Brak zdjęć do importu po filtracji"); return; }
+    if (isMS) toast.info(`Zdjęcia multispektralne: wczytuję ${kept.length} z ${total} plików`);
+    // Stash as FileList-like via DataTransfer
+    const dt = new DataTransfer();
+    kept.forEach((f) => dt.items.add(f));
+    setPendingFiles(dt.files);
+    setShowAglPrompt(true);
+  }, [filterMultispectral]);
 
   const processImport = useCallback(async (files: FileList, userAgl: number) => {
     const newPhotos: PhotoPoint[] = [];
@@ -452,7 +483,7 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
-          onMapClick={(lat, lng) => { setClickedCoords({ lat, lng }); handleMapClickForDrawing(lat, lng); }}
+          onMapClick={(lat, lng) => { setClickedCoords({ lat, lng }); setWmsPixelInfo(null); handleMapClickForDrawing(lat, lng); }}
           onMapDblClick={handleMapDblClickForDrawing}
           coverageGaps={coverageGaps}
           drawingLayers={drawingLayers}
@@ -460,6 +491,7 @@ const Index = () => {
           drawMode={drawMode}
           selectedFeatureId={selectedFeature?.featureId ?? null}
           onFeatureClick={handleSelectFeature}
+          onWmsPixelInfo={(layer, info) => setWmsPixelInfo({ layer, info })}
         />
 
         {showAglPrompt && (
@@ -499,6 +531,11 @@ const Index = () => {
               <div className="font-mono leading-relaxed">
                 <div>{coords.line1}</div>
                 <div>{coords.line2}</div>
+                {wmsPixelInfo && (
+                  <div className="mt-1 pt-1 border-t text-[11px] text-primary break-all">
+                    <span className="text-muted-foreground">{wmsPixelInfo.layer}:</span> {wmsPixelInfo.info}
+                  </div>
+                )}
               </div>
             </div>
           );

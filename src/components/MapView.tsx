@@ -40,6 +40,7 @@ interface MapViewProps {
   drawMode?: DrawMode;
   selectedFeatureId?: string | null;
   onFeatureClick?: (layerId: string, featureId: string) => void;
+  onWmsPixelInfo?: (layerName: string, info: string) => void;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
@@ -70,6 +71,7 @@ const MapView = ({
   drawMode = "none",
   selectedFeatureId = null,
   onFeatureClick,
+  onWmsPixelInfo,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,10 @@ const MapView = ({
   const onMapDblClickRef = useRef(onMapDblClick);
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
   const drawingLayerRef = useRef<L.LayerGroup | null>(null);
+  const baseLayerRef = useRef(baseLayer);
+  const wmsUrlRef = useRef(wmsUrl);
+  const wmsLayerNameRef = useRef(wmsLayer);
+  const onWmsPixelInfoRef = useRef(onWmsPixelInfo);
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
@@ -148,6 +154,49 @@ const MapView = ({
     return true;
   };
 
+  const fetchWmsInfo = async (event: L.LeafletMouseEvent) => {
+    const map = mapRef.current;
+    const url = wmsUrlRef.current;
+    const layerName = wmsLayerNameRef.current;
+    if (!map || !url || !layerName) return;
+    const size = map.getSize();
+    const bounds = map.getBounds();
+    const point = map.latLngToContainerPoint(event.latlng);
+    const params = new URLSearchParams({
+      SERVICE: "WMS",
+      VERSION: "1.1.1",
+      REQUEST: "GetFeatureInfo",
+      LAYERS: layerName,
+      QUERY_LAYERS: layerName,
+      BBOX: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
+      WIDTH: String(size.x),
+      HEIGHT: String(size.y),
+      SRS: "EPSG:4326",
+      X: String(Math.round(point.x)),
+      Y: String(Math.round(point.y)),
+      INFO_FORMAT: "application/json",
+      FEATURE_COUNT: "1",
+    });
+    try {
+      const reqUrl = url + (url.includes("?") ? "&" : "?") + params.toString();
+      const res = await fetch(reqUrl);
+      const text = await res.text();
+      let value = "";
+      try {
+        const json = JSON.parse(text);
+        const props = json.features?.[0]?.properties;
+        if (props && Object.keys(props).length) {
+          value = Object.entries(props).map(([k, v]) => `${k}=${typeof v === "number" ? (v as number).toFixed(3) : v}`).join(", ");
+        }
+      } catch {
+        value = text.replace(/<[^>]+>/g, " ").trim().slice(0, 200);
+      }
+      onWmsPixelInfoRef.current?.(layerName, value || "brak danych");
+    } catch {
+      onWmsPixelInfoRef.current?.(layerName, "błąd (CORS?)");
+    }
+  };
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -164,8 +213,14 @@ const MapView = ({
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
       onMapClickRef.current?.(event.latlng.lat, event.latlng.lng);
-      if (measureModeRef.current === "none") return;
-      addMeasurementPoint(event.latlng.lat, event.latlng.lng);
+      if (measureModeRef.current !== "none") {
+        addMeasurementPoint(event.latlng.lat, event.latlng.lng);
+        return;
+      }
+      // WMS GetFeatureInfo
+      if (baseLayerRef.current === "wms" && wmsUrlRef.current && wmsLayerNameRef.current) {
+        fetchWmsInfo(event);
+      }
     };
 
     const handleMapDblClick = (event: L.LeafletMouseEvent) => {
@@ -190,8 +245,28 @@ const MapView = ({
     measureModeRef.current = measureMode;
     onMapClickRef.current = onMapClick;
     onMapDblClickRef.current = onMapDblClick;
-    snapTargetsRef.current = createPhotoSnapTargets(photos);
-  }, [measureMode, onMapClick, onMapDblClick, photos]);
+    baseLayerRef.current = baseLayer;
+    wmsUrlRef.current = wmsUrl;
+    wmsLayerNameRef.current = wmsLayer;
+    onWmsPixelInfoRef.current = onWmsPixelInfo;
+    // Build snap targets: photo centers/corners + drawing layer vertices
+    const photoTargets = createPhotoSnapTargets(photos);
+    const drawTargets = drawingLayers.flatMap((dl) =>
+      dl.visible
+        ? dl.features.flatMap((f) =>
+            f.coordinates.map(([lat, lng], i) => ({
+              id: `${dl.id}-${f.id}-${i}`,
+              lat,
+              lng,
+              label: `${dl.name} v${i + 1}`,
+              kind: "corner" as const,
+              photoId: "",
+            }))
+          )
+        : []
+    );
+    snapTargetsRef.current = [...photoTargets, ...drawTargets];
+  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers]);
 
   useEffect(() => {
     resetMeasurement();
@@ -472,7 +547,17 @@ const MapView = ({
           })
             .bindTooltip(tooltip, { direction: "center" })
             .addTo(layer);
-          m.on("click", handleClick);
+          m.on("click", (e) => {
+            if (measureModeRef.current !== "none") {
+              const pts = f.coordinates.map(([lat, lng]) => ({ lat, lng }));
+              const area = calcPolygonArea(pts);
+              const perim = calcPolylineDistance([...pts, pts[0]]);
+              onMeasurementChange?.({ distanceMeters: perim, areaSquareMeters: area, pointCount: pts.length });
+              L.DomEvent.stop(e);
+              return;
+            }
+            handleClick(e);
+          });
         }
       });
     });

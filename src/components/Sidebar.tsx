@@ -212,7 +212,7 @@ const Sidebar = ({
           <Button variant={measureMode === "distance" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("distance")}>Dystans</Button>
           <Button variant={measureMode === "area" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("area")}>Pow.</Button>
         </div>
-        <p className="text-xs text-muted-foreground">Klikaj na mapie; snapping do środków zdjęć i narożników.</p>
+        <p className="text-xs text-muted-foreground">Snapping do środków/narożników zdjęć oraz wierzchołków warstw rysowania. Kliknij na narysowany poligon, aby od razu policzyć jego powierzchnię.</p>
         {measurement && measurement.pointCount > 0 && (
           <div className="space-y-1 rounded-md border bg-background p-3 text-xs text-foreground">
             <div className="flex justify-between"><span>Punkty:</span><span className="font-mono">{measurement.pointCount}</span></div>
