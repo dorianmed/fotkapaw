@@ -483,7 +483,7 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
-          onMapClick={(lat, lng) => { setClickedCoords({ lat, lng }); handleMapClickForDrawing(lat, lng); }}
+          onMapClick={(lat, lng) => { setClickedCoords({ lat, lng }); setWmsPixelInfo(null); handleMapClickForDrawing(lat, lng); }}
           onMapDblClick={handleMapDblClickForDrawing}
           coverageGaps={coverageGaps}
           drawingLayers={drawingLayers}
@@ -491,6 +491,7 @@ const Index = () => {
           drawMode={drawMode}
           selectedFeatureId={selectedFeature?.featureId ?? null}
           onFeatureClick={handleSelectFeature}
+          onWmsPixelInfo={(layer, info) => setWmsPixelInfo({ layer, info })}
         />
 
         {showAglPrompt && (
