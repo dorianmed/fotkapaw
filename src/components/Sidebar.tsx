@@ -13,6 +13,7 @@ import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
 import { DrawingLayer } from "@/types/drawing";
 import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
+import { CoordinateSystem, EXPORT_EPSG } from "@/lib/coordinateUtils";
 import { useState, ReactNode } from "react";
 
 interface SidebarProps {
