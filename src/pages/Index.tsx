@@ -469,6 +469,7 @@ const Index = () => {
           onSelectFeature={handleSelectFeature}
           onFinishDrawing={finalizeDrawingNow}
           drawingInProgressCount={drawingPoints.length}
+          selectedFeature={selectedFeature}
         />
       </div>
 
