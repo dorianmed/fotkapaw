@@ -65,10 +65,11 @@ interface SidebarProps {
   onRemoveDrawLayer: (id: string) => void;
   onRenameDrawLayer: (id: string, name: string) => void;
   onChangeDrawLayerColor: (id: string, color: string) => void;
-  onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt") => void;
+  onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt", epsg?: CoordinateSystem, onlyFeatureId?: string) => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
   onFinishDrawing: () => void;
   drawingInProgressCount: number;
+  selectedFeature: { layerId: string; featureId: string } | null;
 }
 
 const exportKml = (layer: KmlLayer) => {
