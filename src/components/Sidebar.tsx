@@ -140,10 +140,11 @@ const Sidebar = ({
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
   onAddDrawLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
   onRenameDrawLayer, onChangeDrawLayerColor, onExportDrawLayer, onSelectFeature,
-  onFinishDrawing, drawingInProgressCount,
+  onFinishDrawing, drawingInProgressCount, selectedFeature,
 }: SidebarProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [expandedFeatureLists, setExpandedFeatureLists] = useState<Record<string, boolean>>({});
+  const [exportEpsg, setExportEpsg] = useState<CoordinateSystem>("wgs84");
   const activeLayer = drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null;
   const drawMode = activeLayer?.type ?? "none";
 
