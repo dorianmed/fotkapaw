@@ -314,6 +314,16 @@ const Sidebar = ({
             ? "Klikaj na mapie. Linie/poligony: dblklik, klik na 1. wierzchołek lub przycisk Zakończ. ESC = wyjście."
             : "Wybierz warstwę aby aktywować rysowanie."}
         </p>
+        <div className="flex items-center gap-2 rounded border p-2">
+          <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Eksport EPSG:</Label>
+          <select
+            className="flex-1 h-7 text-xs rounded border bg-background px-1"
+            value={exportEpsg}
+            onChange={(e) => setExportEpsg(e.target.value as CoordinateSystem)}
+          >
+            {EXPORT_EPSG.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
         {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
           <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
             Zakończ ({drawingInProgressCount} pkt)
