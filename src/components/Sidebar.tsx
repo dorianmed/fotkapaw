@@ -379,14 +379,21 @@ const Sidebar = ({
                   )}
                 </div>
               )}
-              {dl.features.length > 0 && (
-                <div className="grid grid-cols-2 gap-1 pt-1">
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "kml")}>KML</Button>
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "dxf")}>DXF</Button>
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "geojson")}>GeoJSON</Button>
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "txt")}>TXT</Button>
-                </div>
-              )}
+              {dl.features.length > 0 && (() => {
+                const sel = selectedFeature?.layerId === dl.id ? selectedFeature.featureId : undefined;
+                const label = sel ? "obiekt" : "warstwa";
+                return (
+                  <div className="space-y-1 pt-1">
+                    <p className="text-[10px] text-muted-foreground">Eksport ({label}{sel ? "" : ` ${dl.features.length} obj.`}):</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "kml", exportEpsg, sel)}>KML</Button>
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "dxf", exportEpsg, sel)}>DXF</Button>
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "geojson", exportEpsg, sel)}>GeoJSON</Button>
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "txt", exportEpsg, sel)}>TXT</Button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
