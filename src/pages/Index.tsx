@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates } from "@/lib/coordinateUtils";
+import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
@@ -335,22 +335,36 @@ const Index = () => {
     setSelectedFeature(null);
   }, []);
 
-  const layerToGeoJson = useCallback((layer: DrawingLayer): GeoJSON.FeatureCollection => ({
-    type: "FeatureCollection",
-    features: layer.features.map((f) => {
-      const props = { name: f.attrs.name, description: f.attrs.description };
-      if (layer.type === "point") return { type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: [f.coordinates[0][1], f.coordinates[0][0]] } };
-      if (layer.type === "line") return { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => [lng, lat]) } };
-      const ring = [...f.coordinates.map(([lat, lng]) => [lng, lat]), [f.coordinates[0][1], f.coordinates[0][0]]];
-      return { type: "Feature" as const, properties: props, geometry: { type: "Polygon" as const, coordinates: [ring] } };
-    }),
-  }), []);
+  const layerToGeoJson = useCallback((layer: DrawingLayer, epsg: CoordinateSystem = "wgs84", onlyFeatureId?: string): GeoJSON.FeatureCollection => {
+    const project = (lat: number, lng: number) => projectCoords(lat, lng, epsg);
+    const feats = onlyFeatureId ? layer.features.filter((f) => f.id === onlyFeatureId) : layer.features;
+    return {
+      type: "FeatureCollection",
+      features: feats.map((f) => {
+        const props = { name: f.attrs.name, description: f.attrs.description };
+        if (layer.type === "point") {
+          const [x, y] = project(f.coordinates[0][0], f.coordinates[0][1]);
+          return { type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: [x, y] } };
+        }
+        if (layer.type === "line") {
+          return { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => project(lat, lng)) } };
+        }
+        const ring = f.coordinates.map(([lat, lng]) => project(lat, lng));
+        ring.push(ring[0]);
+        return { type: "Feature" as const, properties: props, geometry: { type: "Polygon" as const, coordinates: [ring] } };
+      }),
+    };
+  }, []);
 
-  const handleExportDrawLayer = useCallback((id: string, format: "kml" | "dxf" | "geojson" | "txt") => {
+  const handleExportDrawLayer = useCallback((id: string, format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem = "wgs84", onlyFeatureId?: string) => {
     const layer = drawingLayers.find((l) => l.id === id);
     if (!layer || layer.features.length === 0) { toast.warning("Warstwa jest pusta"); return; }
-    const geojson = layerToGeoJson(layer);
-    const name = layer.name.replace(/\s+/g, "_");
+    // KML musi być w WGS84 (specyfikacja OGC). Wymuś.
+    const useEpsg: CoordinateSystem = format === "kml" ? "wgs84" : epsg;
+    const geojson = layerToGeoJson(layer, useEpsg, onlyFeatureId);
+    if (geojson.features.length === 0) { toast.warning("Brak obiektu do eksportu"); return; }
+    const suffix = onlyFeatureId ? "_obiekt" : "";
+    const name = layer.name.replace(/\s+/g, "_") + suffix;
     if (format === "kml") {
       const featuresKml = geojson.features.map((f) => {
         const coords = (f.geometry as any).coordinates;
@@ -367,6 +381,7 @@ const Index = () => {
     } else if (format === "dxf") exportDxf(geojson, name);
     else if (format === "geojson") exportGeoJson(geojson, name);
     else exportTxtFile(geojson, name);
+    if (useEpsg !== "wgs84") toast.success(`Eksport w ${useEpsg.toUpperCase()}`);
   }, [drawingLayers, layerToGeoJson]);
 
   const selectedFeatureData = useMemo(() => {
@@ -454,6 +469,7 @@ const Index = () => {
           onSelectFeature={handleSelectFeature}
           onFinishDrawing={finalizeDrawingNow}
           drawingInProgressCount={drawingPoints.length}
+          selectedFeature={selectedFeature}
         />
       </div>
 

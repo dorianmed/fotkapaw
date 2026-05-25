@@ -13,6 +13,7 @@ import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
 import { DrawingLayer } from "@/types/drawing";
 import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
+import { CoordinateSystem, EXPORT_EPSG } from "@/lib/coordinateUtils";
 import { useState, ReactNode } from "react";
 
 interface SidebarProps {
@@ -64,10 +65,11 @@ interface SidebarProps {
   onRemoveDrawLayer: (id: string) => void;
   onRenameDrawLayer: (id: string, name: string) => void;
   onChangeDrawLayerColor: (id: string, color: string) => void;
-  onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt") => void;
+  onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt", epsg?: CoordinateSystem, onlyFeatureId?: string) => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
   onFinishDrawing: () => void;
   drawingInProgressCount: number;
+  selectedFeature: { layerId: string; featureId: string } | null;
 }
 
 const exportKml = (layer: KmlLayer) => {
@@ -138,10 +140,11 @@ const Sidebar = ({
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
   onAddDrawLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
   onRenameDrawLayer, onChangeDrawLayerColor, onExportDrawLayer, onSelectFeature,
-  onFinishDrawing, drawingInProgressCount,
+  onFinishDrawing, drawingInProgressCount, selectedFeature,
 }: SidebarProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [expandedFeatureLists, setExpandedFeatureLists] = useState<Record<string, boolean>>({});
+  const [exportEpsg, setExportEpsg] = useState<CoordinateSystem>("wgs84");
   const activeLayer = drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null;
   const drawMode = activeLayer?.type ?? "none";
 
@@ -311,6 +314,16 @@ const Sidebar = ({
             ? "Klikaj na mapie. Linie/poligony: dblklik, klik na 1. wierzchołek lub przycisk Zakończ. ESC = wyjście."
             : "Wybierz warstwę aby aktywować rysowanie."}
         </p>
+        <div className="flex items-center gap-2 rounded border p-2">
+          <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Eksport EPSG:</Label>
+          <select
+            className="flex-1 h-7 text-xs rounded border bg-background px-1"
+            value={exportEpsg}
+            onChange={(e) => setExportEpsg(e.target.value as CoordinateSystem)}
+          >
+            {EXPORT_EPSG.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
         {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
           <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
             Zakończ ({drawingInProgressCount} pkt)
@@ -376,14 +389,21 @@ const Sidebar = ({
                   )}
                 </div>
               )}
-              {dl.features.length > 0 && (
-                <div className="grid grid-cols-2 gap-1 pt-1">
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "kml")}>KML</Button>
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "dxf")}>DXF</Button>
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "geojson")}>GeoJSON</Button>
-                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "txt")}>TXT</Button>
-                </div>
-              )}
+              {dl.features.length > 0 && (() => {
+                const sel = selectedFeature?.layerId === dl.id ? selectedFeature.featureId : undefined;
+                const label = sel ? "obiekt" : "warstwa";
+                return (
+                  <div className="space-y-1 pt-1">
+                    <p className="text-[10px] text-muted-foreground">Eksport ({label}{sel ? "" : ` ${dl.features.length} obj.`}):</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "kml", exportEpsg, sel)}>KML</Button>
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "dxf", exportEpsg, sel)}>DXF</Button>
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "geojson", exportEpsg, sel)}>GeoJSON</Button>
+                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "txt", exportEpsg, sel)}>TXT</Button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

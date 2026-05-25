@@ -93,3 +93,24 @@ export const COORDINATE_SYSTEMS: { value: CoordinateSystem; label: string }[] = 
   { value: "puwg1992", label: "PUWG 1992" },
   { value: "puwg2000", label: "PUWG 2000" },
 ];
+
+/** Konwersja WGS84 (lat/lng) -> wybrany układ. Zwraca [x, y] gdzie x=Easting, y=Northing
+ *  (dla geograficznego: x=lng, y=lat). */
+export function projectCoords(lat: number, lng: number, system: CoordinateSystem): [number, number] {
+  if (system === "wgs84") return [lng, lat];
+  if (system === "puwg1992") {
+    const { x, y } = gaussKruger(lat, lng, 19.0, 0.9993, 500000, -5300000);
+    return [y, x]; // y=Easting, x=Northing -> [E, N]
+  }
+  const zone = lng < 16.5 ? 5 : lng < 19.5 ? 6 : lng < 22.5 ? 7 : 8;
+  const L0 = zone * 3;
+  const FE = zone * 1000000 + 500000;
+  const { x, y } = gaussKruger(lat, lng, L0, 0.999923, FE, 0);
+  return [y, x];
+}
+
+export const EXPORT_EPSG: { value: CoordinateSystem; label: string; epsg: string }[] = [
+  { value: "wgs84", label: "WGS 84 (EPSG:4326)", epsg: "4326" },
+  { value: "puwg1992", label: "PUWG 1992 (EPSG:2180)", epsg: "2180" },
+  { value: "puwg2000", label: "PUWG 2000 z. auto (EPSG:2176-2179)", epsg: "2176" },
+];
