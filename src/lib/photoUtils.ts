@@ -153,97 +153,100 @@ export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
   if (photos.length < 2) return photos;
   const sorted = [...photos].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0));
 
+  // Use IMMEDIATE neighbour for heading (i → i+1). Lookahead of 3 photos
+  // crossed strips and produced wildly wrong "along-track" decomposition.
   return sorted.map((photo, index) => {
-    const nextIdx = Math.min(index + 3, sorted.length - 1);
-    const prevIdx = Math.max(index - 3, 0);
     const heading = index < sorted.length - 1
-      ? calcBearing(photo.lat, photo.lng, sorted[nextIdx].lat, sorted[nextIdx].lng)
-      : calcBearing(sorted[prevIdx].lat, sorted[prevIdx].lng, photo.lat, photo.lng);
-
+      ? calcBearing(photo.lat, photo.lng, sorted[index + 1].lat, sorted[index + 1].lng)
+      : calcBearing(sorted[index - 1].lat, sorted[index - 1].lng, photo.lat, photo.lng);
     return { ...photo, heading };
   });
 }
 
 export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]): OverlapCandidate[] {
   const results: OverlapCandidate[] = [];
-
   for (const photo of photos) {
     if (photo.id === selected.id) continue;
-
     const { distance, headingDiff, alongTrack, acrossTrack } = projectPhotoOffsetMeters(selected, photo);
     const maxReach = Math.max(selected.footprintWidth, selected.footprintHeight, photo.footprintWidth, photo.footprintHeight);
     if (distance > maxReach * 2) continue;
-
     const avgAlongDim = (selected.footprintHeight + photo.footprintHeight) / 2;
     const avgAcrossDim = (selected.footprintWidth + photo.footprintWidth) / 2;
     const forward = calcAxisOverlapPercent(alongTrack, avgAlongDim);
     const lateral = calcAxisOverlapPercent(acrossTrack, avgAcrossDim);
     const type: "forward" | "lateral" | "both" = headingDiff < 45 || headingDiff > 135 ? "forward" : "lateral";
-
     if (forward > 0 || lateral > 0) {
-      results.push({
-        photo,
-        forward,
-        lateral,
-        type,
-        alongTrack,
-        acrossTrack,
-      });
+      results.push({ photo, forward, lateral, type, alongTrack, acrossTrack });
     }
   }
-
   return results;
 }
 
-function addUniquePair(collection: Map<string, OverlapPair>, sourceId: string, candidate: OverlapCandidate) {
-  const key = [sourceId, candidate.photo.id].sort().join("-");
-  if (collection.has(key)) return;
-
-  collection.set(key, {
-    id1: sourceId,
-    id2: candidate.photo.id,
-    forward: candidate.forward,
-    lateral: candidate.lateral,
-    type: candidate.type,
-    alongTrack: Math.abs(candidate.alongTrack),
-    acrossTrack: Math.abs(candidate.acrossTrack),
-  });
-}
-
+/**
+ * Pokrycie obliczane bezpośrednio z geometrii:
+ *  - podłużne (forward): pomiędzy sąsiednimi w czasie zdjęciami w obrębie tego samego pasa
+ *      forward% = (1 - odległość / średnia długość footprintu w osi lotu) * 100
+ *  - poprzeczne (lateral): najbliższy sąsiad NIE-czasowy w kierunku prostopadłym do osi lotu
+ *      lateral% = (1 - odległość prostopadła / średnia szerokość footprintu) * 100
+ */
 export function analyzeOverlap(photos: PhotoPoint[]): OverlapStats {
   if (photos.length < 2) return { pairs: [], avgForward: 0, avgLateral: 0 };
 
-  const sortedPhotos = [...photos].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0));
-  const forwardPairs = new Map<string, OverlapPair>();
+  const sorted = [...photos].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0));
+  const forwardPairs: OverlapPair[] = [];
   const lateralPairs = new Map<string, OverlapPair>();
 
-  for (const photo of sortedPhotos) {
-    const overlaps = findOverlappingPhotos(photo, sortedPhotos);
+  // Forward: kolejne pary w czasie, pomijając skoki na nowy pas
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i];
+    const b = sorted[i + 1];
+    const distance = calcDistance(a.lat, a.lng, b.lat, b.lng);
+    const avgAlongDim = (a.footprintHeight + b.footprintHeight) / 2;
+    if (avgAlongDim <= 0) continue;
+    // Skok pasa: distance znacznie większy niż wzdłużny wymiar footprintu
+    if (distance > avgAlongDim * 1.5) continue;
+    const forward = Math.max(0, (1 - distance / avgAlongDim) * 100);
+    forwardPairs.push({
+      id1: a.id, id2: b.id, forward, lateral: 0, type: "forward",
+      alongTrack: distance, acrossTrack: 0,
+    });
+  }
 
-    const nearestForward = overlaps
-      .filter((candidate) => candidate.type === "forward" && candidate.forward > 0 && candidate.alongTrack > 0)
-      .sort((a, b) => Math.abs(a.alongTrack) - Math.abs(b.alongTrack))[0];
-
-    if (nearestForward) {
-      addUniquePair(forwardPairs, photo.id, nearestForward);
+  // Lateral: dla każdego zdjęcia szukamy najbliższego sąsiada poprzecznego
+  // (NIE bezpośredniego sąsiada czasowego), używając rzutu na oś prostopadłą.
+  for (let i = 0; i < sorted.length; i++) {
+    const photo = sorted[i];
+    let best: { other: PhotoPoint; lateralDist: number } | null = null;
+    for (let j = 0; j < sorted.length; j++) {
+      if (j === i || j === i - 1 || j === i + 1) continue;
+      const other = sorted[j];
+      const { distance, headingDiff, acrossTrack, alongTrack } = projectPhotoOffsetMeters(photo, other);
+      // Tylko prawdziwie "boczni" sąsiedzi: bliżej w osi wzdłużnej niż footprint, daleko w osi poprzecznej
+      if (Math.abs(alongTrack) > photo.footprintHeight) continue;
+      if (distance > Math.max(photo.footprintWidth, other.footprintWidth) * 2) continue;
+      const lateralDist = Math.abs(acrossTrack);
+      if (!best || lateralDist < best.lateralDist) best = { other, lateralDist };
     }
-
-    const nearestLateral = overlaps
-      .filter((candidate) => candidate.type === "lateral" && candidate.lateral > 0)
-      .sort((a, b) => Math.abs(a.acrossTrack) - Math.abs(b.acrossTrack))[0];
-
-    if (nearestLateral) {
-      addUniquePair(lateralPairs, photo.id, nearestLateral);
+    if (best) {
+      const avgAcrossDim = (photo.footprintWidth + best.other.footprintWidth) / 2;
+      if (avgAcrossDim <= 0) continue;
+      const lateral = Math.max(0, (1 - best.lateralDist / avgAcrossDim) * 100);
+      if (lateral <= 0) continue;
+      const key = [photo.id, best.other.id].sort().join("-");
+      if (!lateralPairs.has(key)) {
+        lateralPairs.set(key, {
+          id1: photo.id, id2: best.other.id, forward: 0, lateral, type: "lateral",
+          alongTrack: 0, acrossTrack: best.lateralDist,
+        });
+      }
     }
   }
 
-  const forwardValues = [...forwardPairs.values()].map((pair) => pair.forward).filter((value) => value > 0);
-  const lateralValues = [...lateralPairs.values()].map((pair) => pair.lateral).filter((value) => value > 0);
-  const pairs = [...forwardPairs.values(), ...lateralPairs.values()];
-
+  const fwd = forwardPairs.map((p) => p.forward).filter((v) => v > 0);
+  const lat = [...lateralPairs.values()].map((p) => p.lateral).filter((v) => v > 0);
   return {
-    pairs,
-    avgForward: forwardValues.length > 0 ? forwardValues.reduce((sum, value) => sum + value, 0) / forwardValues.length : 0,
-    avgLateral: lateralValues.length > 0 ? lateralValues.reduce((sum, value) => sum + value, 0) / lateralValues.length : 0,
+    pairs: [...forwardPairs, ...lateralPairs.values()],
+    avgForward: fwd.length ? fwd.reduce((s, v) => s + v, 0) / fwd.length : 0,
+    avgLateral: lat.length ? lat.reduce((s, v) => s + v, 0) / lat.length : 0,
   };
 }
