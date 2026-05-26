@@ -561,14 +561,29 @@ const Index = () => {
 
         {showAglPrompt && (
           <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/50">
-            <div className="rounded-lg border bg-card p-6 shadow-xl w-80 space-y-4">
-              <h3 className="text-sm font-bold text-foreground">Podaj wysokość lotu AGL</h3>
-              <p className="text-xs text-muted-foreground">Wysokość nad terenem w metrach.</p>
-              <Input type="number" step="0.1" min="1" placeholder="np. 100" value={aglAltitude ?? ""}
-                onChange={(e) => setAglAltitude(parseFloat(e.target.value) || null)} autoFocus
-                onKeyDown={(e) => e.key === "Enter" && handleAglConfirm()} />
+            <div className="rounded-lg border bg-card p-6 shadow-xl w-96 space-y-4">
+              <h3 className="text-sm font-bold text-foreground">Wysokość lotu AGL</h3>
+
+              <div className="flex items-center justify-between rounded-md border p-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="use-dem" className="text-xs font-semibold">Wylicz AGL z DEM (Copernicus 30 m)</Label>
+                  <p className="text-[10px] text-muted-foreground leading-tight">AGL = GPSAltitude − wysokość terenu z modelu.</p>
+                </div>
+                <Switch id="use-dem" checked={useDemForAgl} onCheckedChange={setUseDemForAgl} />
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {useDemForAgl ? "Ręczny AGL — fallback, gdy DEM/GPS niedostępne." : "Wysokość nad terenem w metrach."}
+                </p>
+                <Input type="number" step="0.1" min="1" placeholder="np. 100" value={aglAltitude ?? ""}
+                  onChange={(e) => setAglAltitude(parseFloat(e.target.value) || null)} autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && handleAglConfirm()} />
+              </div>
+
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={handleAglConfirm} disabled={!aglAltitude || aglAltitude <= 0}>Importuj</Button>
+                <Button className="flex-1" onClick={handleAglConfirm}
+                  disabled={!useDemForAgl && (!aglAltitude || aglAltitude <= 0)}>Importuj</Button>
                 <Button variant="outline" onClick={() => { setShowAglPrompt(false); setPendingFiles(null); }}>Anuluj</Button>
               </div>
             </div>
