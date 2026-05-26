@@ -17,6 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
 import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
+import { fetchTerrainHeights } from "@/lib/terrainUtils";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const LAYER_COLORS = { point: "#ef4444", line: "#3b82f6", polygon: "#22c55e" } as const;
 
