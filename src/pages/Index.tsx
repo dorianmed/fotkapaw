@@ -44,6 +44,7 @@ const Index = () => {
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
+  const [useDemForAgl, setUseDemForAgl] = useState(false);
   const [showAglPrompt, setShowAglPrompt] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
