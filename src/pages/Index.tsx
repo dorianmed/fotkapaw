@@ -17,6 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
 import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
+import { fetchTerrainHeights } from "@/lib/terrainUtils";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const LAYER_COLORS = { point: "#ef4444", line: "#3b82f6", polygon: "#22c55e" } as const;
 
@@ -41,6 +44,7 @@ const Index = () => {
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
+  const [useDemForAgl, setUseDemForAgl] = useState(false);
   const [showAglPrompt, setShowAglPrompt] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
@@ -95,41 +99,80 @@ const Index = () => {
     setShowAglPrompt(true);
   }, [filterMultispectral]);
 
-  const processImport = useCallback(async (files: FileList, userAgl: number) => {
-    const newPhotos: PhotoPoint[] = [];
-    let noGps = 0;
+  const processImport = useCallback(async (files: FileList, opts: { manualAgl: number; useDem: boolean }) => {
     const total = files.length;
     setImportProgress({ current: 0, total });
 
+    // 1) parse EXIF for all photos
+    type Parsed = { file: File; exif: any };
+    const parsed: Parsed[] = [];
+    let noGps = 0;
     for (let i = 0; i < total; i++) {
       const file = files[i];
       try {
         const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
-        if (!exif?.latitude || !exif?.longitude) { noGps++; setImportProgress({ current: i + 1, total }); continue; }
-
-        const estimated = estimateSensorDimensions(exif);
-        const altitudeAGL = userAgl;
-        const currentSensor: SensorConfig = {
-          resolutionX: estimated.resX, resolutionY: estimated.resY,
-          sensorWidth: estimated.width, sensorHeight: estimated.height,
-          focalLength: estimated.focal, flightAltitude: altitudeAGL,
-        };
-        const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
-        const longSide = Math.max(groundWidth, groundHeight);
-        const shortSide = Math.min(groundWidth, groundHeight);
-
-        newPhotos.push({
-          id: `${file.name}-${Date.now()}-${Math.random()}`,
-          filename: file.name, lat: exif.latitude, lng: exif.longitude,
-          altitude: exif.GPSAltitude,
-          timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
-          footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
-          gsd: calcGSD(currentSensor, altitudeAGL),
-          sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
-          thumbnailUrl: URL.createObjectURL(file),
-        });
+        if (!exif?.latitude || !exif?.longitude) { noGps++; }
+        else parsed.push({ file, exif });
       } catch { noGps++; }
       setImportProgress({ current: i + 1, total });
+    }
+
+    // 2) optionally fetch DEM heights and compute per-photo AGL
+    let terrainHeights: (number | null)[] | null = null;
+    if (opts.useDem && parsed.length > 0) {
+      const haveAlt = parsed.filter((p) => typeof p.exif.GPSAltitude === "number").length;
+      if (haveAlt === 0) {
+        toast.warning("Brak GPSAltitude w EXIF — używam ręcznego AGL");
+      } else {
+        toast.info(`Pobieram wysokości terenu (Copernicus DEM) dla ${parsed.length} punktów…`);
+        try {
+          terrainHeights = await fetchTerrainHeights(
+            parsed.map((p) => ({ lat: p.exif.latitude, lng: p.exif.longitude })),
+            (done, tot) => setImportProgress({ current: done, total: tot }),
+          );
+        } catch {
+          toast.error("Nie udało się pobrać DEM — używam ręcznego AGL");
+          terrainHeights = null;
+        }
+      }
+    }
+
+    // 3) build photos
+    const newPhotos: PhotoPoint[] = [];
+    let aglSum = 0, aglN = 0;
+    for (let i = 0; i < parsed.length; i++) {
+      const { file, exif } = parsed[i];
+      let altitudeAGL = opts.manualAgl;
+      if (terrainHeights) {
+        const droneMsl = exif.GPSAltitude;
+        const terr = terrainHeights[i];
+        if (typeof droneMsl === "number" && typeof terr === "number") {
+          const computed = droneMsl - terr;
+          if (computed > 1) altitudeAGL = computed;
+        }
+      }
+      aglSum += altitudeAGL; aglN++;
+
+      const estimated = estimateSensorDimensions(exif);
+      const currentSensor: SensorConfig = {
+        resolutionX: estimated.resX, resolutionY: estimated.resY,
+        sensorWidth: estimated.width, sensorHeight: estimated.height,
+        focalLength: estimated.focal, flightAltitude: altitudeAGL,
+      };
+      const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
+      const longSide = Math.max(groundWidth, groundHeight);
+      const shortSide = Math.min(groundWidth, groundHeight);
+
+      newPhotos.push({
+        id: `${file.name}-${Date.now()}-${Math.random()}`,
+        filename: file.name, lat: exif.latitude, lng: exif.longitude,
+        altitude: exif.GPSAltitude,
+        timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
+        footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
+        gsd: calcGSD(currentSensor, altitudeAGL),
+        sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
+        thumbnailUrl: URL.createObjectURL(file),
+      });
     }
 
     if (newPhotos.length > 0) {
@@ -141,19 +184,25 @@ const Index = () => {
           footprintCorners: calcFootprintCorners(photo.lat, photo.lng, photo.footprintWidth, photo.footprintHeight, photo.heading ?? 0),
         }));
       });
-      toast.success(`Zaimportowano ${newPhotos.length} zdjęć`);
+      const avgAgl = aglN ? (aglSum / aglN) : 0;
+      toast.success(
+        terrainHeights
+          ? `Zaimportowano ${newPhotos.length} zdjęć. Średni AGL z DEM: ${avgAgl.toFixed(1)} m`
+          : `Zaimportowano ${newPhotos.length} zdjęć (AGL ${opts.manualAgl} m)`
+      );
     }
     if (noGps > 0) toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
     setImportProgress(null);
   }, []);
 
   const handleAglConfirm = useCallback(() => {
-    if (pendingFiles && aglAltitude !== null && aglAltitude > 0) {
-      setShowAglPrompt(false);
-      processImport(pendingFiles, aglAltitude);
-      setPendingFiles(null);
-    }
-  }, [pendingFiles, aglAltitude, processImport]);
+    if (!pendingFiles) return;
+    const manual = aglAltitude ?? 0;
+    if (!useDemForAgl && manual <= 0) return;
+    setShowAglPrompt(false);
+    processImport(pendingFiles, { manualAgl: manual > 0 ? manual : 100, useDem: useDemForAgl });
+    setPendingFiles(null);
+  }, [pendingFiles, aglAltitude, useDemForAgl, processImport]);
 
   const handleImportKml = useCallback(async (file: File) => {
     try {
@@ -512,14 +561,29 @@ const Index = () => {
 
         {showAglPrompt && (
           <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/50">
-            <div className="rounded-lg border bg-card p-6 shadow-xl w-80 space-y-4">
-              <h3 className="text-sm font-bold text-foreground">Podaj wysokość lotu AGL</h3>
-              <p className="text-xs text-muted-foreground">Wysokość nad terenem w metrach.</p>
-              <Input type="number" step="0.1" min="1" placeholder="np. 100" value={aglAltitude ?? ""}
-                onChange={(e) => setAglAltitude(parseFloat(e.target.value) || null)} autoFocus
-                onKeyDown={(e) => e.key === "Enter" && handleAglConfirm()} />
+            <div className="rounded-lg border bg-card p-6 shadow-xl w-96 space-y-4">
+              <h3 className="text-sm font-bold text-foreground">Wysokość lotu AGL</h3>
+
+              <div className="flex items-center justify-between rounded-md border p-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="use-dem" className="text-xs font-semibold">Wylicz AGL z DEM (Copernicus 30 m)</Label>
+                  <p className="text-[10px] text-muted-foreground leading-tight">AGL = GPSAltitude − wysokość terenu z modelu.</p>
+                </div>
+                <Switch id="use-dem" checked={useDemForAgl} onCheckedChange={setUseDemForAgl} />
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {useDemForAgl ? "Ręczny AGL — fallback, gdy DEM/GPS niedostępne." : "Wysokość nad terenem w metrach."}
+                </p>
+                <Input type="number" step="0.1" min="1" placeholder="np. 100" value={aglAltitude ?? ""}
+                  onChange={(e) => setAglAltitude(parseFloat(e.target.value) || null)} autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && handleAglConfirm()} />
+              </div>
+
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={handleAglConfirm} disabled={!aglAltitude || aglAltitude <= 0}>Importuj</Button>
+                <Button className="flex-1" onClick={handleAglConfirm}
+                  disabled={!useDemForAgl && (!aglAltitude || aglAltitude <= 0)}>Importuj</Button>
                 <Button variant="outline" onClick={() => { setShowAglPrompt(false); setPendingFiles(null); }}>Anuluj</Button>
               </div>
             </div>
