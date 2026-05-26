@@ -10,8 +10,35 @@ type OverlapCandidate = {
 };
 
 /**
- * Próbuje oszacować wymiary sensora z EXIF.
- * Priorytet: 35mm equivalent + focal, potem bezpośrednie pola EXIF, na końcu fallback techniczny.
+ * Baza znanych kamer dronowych (Model EXIF -> wymiary sensora w mm i ogniskowa).
+ * Klucz "match" porównywany jest jako zawiera-się (case-insensitive) z exif.Model.
+ */
+const KNOWN_CAMERAS: { match: string; width: number; height: number; focal?: number }[] = [
+  // DJI Phantom 4 Multispectral (każda z 6 kamer: RGB + 5x MS)
+  { match: "FC6360", width: 4.87, height: 3.96, focal: 5.74 },
+  // DJI Phantom 4 Pro / Advanced (1")
+  { match: "FC6310", width: 13.2, height: 8.8, focal: 8.8 },
+  { match: "FC330",  width: 6.17, height: 4.55, focal: 3.61 }, // P4 standard
+  // DJI Mavic 3 Multispectral – MS sensory 1/2.8" + RGB 4/3 Hasselblad
+  { match: "M3M",    width: 5.6,  height: 4.2,  focal: 4.34 },
+  { match: "FC8482", width: 17.3, height: 13.0, focal: 12.29 },
+  // DJI Mavic 3 / Mavic 3 Enterprise
+  { match: "M3E",    width: 17.3, height: 13.0, focal: 12.29 },
+  { match: "L1D-20c", width: 13.2, height: 8.8,  focal: 10.26 }, // Mavic 2 Pro
+  // DJI Mini / Air
+  { match: "FC7203", width: 6.17, height: 4.55, focal: 4.49 },
+  { match: "FC2403", width: 6.17, height: 4.55, focal: 4.49 },
+  { match: "FC3582", width: 9.65, height: 7.24, focal: 6.72 },
+  // Autel
+  { match: "XT701",  width: 13.2, height: 8.8,  focal: 10.0 },
+  // MicaSense
+  { match: "RedEdge", width: 4.8, height: 3.6, focal: 5.5 },
+  { match: "Altum",   width: 7.12, height: 5.33, focal: 8.0 },
+];
+
+/**
+ * Estymacja wymiarów sensora z EXIF.
+ * Priorytet: znana kamera (Model) -> sensor wprost z EXIF -> 35mm equiv -> FocalPlaneRes -> fallback.
  */
 export function estimateSensorDimensions(exif: any) {
   const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || 4000;
@@ -20,62 +47,59 @@ export function estimateSensorDimensions(exif: any) {
   const focalReal = Number(exif.FocalLength);
   const exifSensorWidth = Number(exif.SensorWidth || exif.sensorWidth);
   const exifSensorHeight = Number(exif.SensorHeight || exif.sensorHeight);
+  const model = String(exif.Model || exif.model || "").trim();
 
-  // Try pixel pitch from FocalPlaneResolution
-  const fpResX = Number(exif.FocalPlaneXResolution);
-  const fpResUnit = Number(exif.FocalPlaneResolutionUnit); // 2=inch, 3=cm, 4=mm
+  // 1) Znana kamera po Model
+  if (model) {
+    const m = model.toUpperCase();
+    const hit = KNOWN_CAMERAS.find((c) => m.includes(c.match.toUpperCase()));
+    if (hit) {
+      return {
+        width: hit.width, height: hit.height,
+        focal: focalReal > 0 ? focalReal : (hit.focal ?? 8.8),
+        resX: widthPx, resY: heightPx, source: "exif" as const,
+      };
+    }
+  }
 
+  // 2) Sensor podany wprost w EXIF
+  if (exifSensorWidth > 0 && exifSensorHeight > 0 && focalReal > 0) {
+    return {
+      width: exifSensorWidth, height: exifSensorHeight, focal: focalReal,
+      resX: widthPx, resY: heightPx, source: "exif" as const,
+    };
+  }
+
+  // 3) 35mm equivalent
   if (focal35 > 0 && focalReal > 0) {
     const cropFactor = focal35 / focalReal;
     const estimatedWidth = 36 / cropFactor;
     const aspectRatio = widthPx / heightPx;
     return {
-      width: estimatedWidth,
-      height: estimatedWidth / aspectRatio,
-      focal: focalReal,
-      resX: widthPx,
-      resY: heightPx,
-      source: "estimated" as const,
+      width: estimatedWidth, height: estimatedWidth / aspectRatio, focal: focalReal,
+      resX: widthPx, resY: heightPx, source: "estimated" as const,
     };
   }
 
-  if (exifSensorWidth > 0 && exifSensorHeight > 0 && focalReal > 0) {
-    return {
-      width: exifSensorWidth,
-      height: exifSensorHeight,
-      focal: focalReal,
-      resX: widthPx,
-      resY: heightPx,
-      source: "exif" as const,
-    };
-  }
-
-  // Try deriving from FocalPlaneResolution
+  // 4) FocalPlaneResolution
+  const fpResX = Number(exif.FocalPlaneXResolution);
+  const fpResUnit = Number(exif.FocalPlaneResolutionUnit); // 2=inch, 3=cm, 4=mm
   if (fpResX > 0 && focalReal > 0) {
     let pixelPitchMm: number;
-    if (fpResUnit === 3) pixelPitchMm = 10 / fpResX; // cm
-    else if (fpResUnit === 4) pixelPitchMm = 1 / fpResX; // mm
-    else pixelPitchMm = 25.4 / fpResX; // inch (default)
-    const sw = widthPx * pixelPitchMm;
-    const sh = heightPx * pixelPitchMm;
+    if (fpResUnit === 3) pixelPitchMm = 10 / fpResX;
+    else if (fpResUnit === 4) pixelPitchMm = 1 / fpResX;
+    else pixelPitchMm = 25.4 / fpResX;
     return {
-      width: sw,
-      height: sh,
-      focal: focalReal,
-      resX: widthPx,
-      resY: heightPx,
-      source: "estimated" as const,
+      width: widthPx * pixelPitchMm, height: heightPx * pixelPitchMm, focal: focalReal,
+      resX: widthPx, resY: heightPx, source: "estimated" as const,
     };
   }
 
-  // Fallback: assume typical small sensor
+  // 5) Fallback
   return {
-    width: 13.2,
-    height: 8.8,
+    width: 13.2, height: 8.8,
     focal: focalReal > 0 ? focalReal : 8.8,
-    resX: widthPx,
-    resY: heightPx,
-    source: "fallback" as const,
+    resX: widthPx, resY: heightPx, source: "fallback" as const,
   };
 }
 
