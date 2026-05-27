@@ -93,11 +93,19 @@ const Index = () => {
 
   const startImport = useCallback((files: FileList) => {
     const { kept, total, isMS } = filterMultispectral(files);
-    if (kept.length === 0) { toast.warning("Brak zdjęć do importu po filtracji"); return; }
-    if (isMS) toast.info(`Zdjęcia multispektralne: wczytuję ${kept.length} z ${total} plików`);
-    // Stash as FileList-like via DataTransfer
+    let finalKept = kept;
+    // Fallback: gdy filtr odrzuci wszystko (folder bez _D.JPG / bez _1.tif),
+    // wczytaj wszystkie pliki obrazów, żeby nie blokować importu.
+    if (finalKept.length === 0) {
+      const all = Array.from(files).filter((f) => /\.(jpe?g|tiff?|png)$/i.test(f.name));
+      if (all.length === 0) { toast.warning("Brak plików obrazów w wybranym folderze"); return; }
+      toast.info(`Filtr MS nic nie zwrócił – wczytuję wszystkie ${all.length} plików`);
+      finalKept = all;
+    } else if (isMS) {
+      toast.info(`Zdjęcia multispektralne: wczytuję ${finalKept.length} z ${total} plików`);
+    }
     const dt = new DataTransfer();
-    kept.forEach((f) => dt.items.add(f));
+    finalKept.forEach((f) => dt.items.add(f));
     setPendingFiles(dt.files);
     setShowAglPrompt(true);
   }, [filterMultispectral]);

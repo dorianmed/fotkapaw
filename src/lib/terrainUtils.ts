@@ -1,14 +1,33 @@
 /**
- * Pobiera wysokość terenu z modelu Copernicus DEM (30 m) przez OpenTopoData.
- * Endpoint: https://api.opentopodata.org/v1/copernicus30m
- * Limity: 100 punktów / zapytanie, 1 req/s, 1000 req/dzień (publiczny serwer).
+ * Pobiera wysokość terenu z Open-Meteo Elevation API (Copernicus DEM 90m, GLO-90).
+ * Endpoint: https://api.open-meteo.com/v1/elevation
+ * - Brak klucza, pełny CORS, brak realnych limitów dziennych.
+ * - Do 100 punktów na jedno zapytanie (lat=...&long=... rozdzielone przecinkami).
+ *
+ * Dane bazują na Copernicus DEM (GLO-90) – ten sam model co wskazany w docs Sentinel Hub,
+ * tylko serwowany przez darmowe, CORS-friendly API Open-Meteo.
  */
 
-const ENDPOINT = "https://api.opentopodata.org/v1/copernicus30m";
+const ENDPOINT = "https://api.open-meteo.com/v1/elevation";
 const BATCH = 100;
-const RATE_DELAY_MS = 1100;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function fetchBatch(batch: { lat: number; lng: number }[]): Promise<(number | null)[]> {
+  const lats = batch.map((c) => c.lat.toFixed(6)).join(",");
+  const lngs = batch.map((c) => c.lng.toFixed(6)).join(",");
+  try {
+    const res = await fetch(`${ENDPOINT}?latitude=${lats}&longitude=${lngs}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const arr: unknown = json?.elevation;
+    if (Array.isArray(arr)) {
+      return arr.map((v) => (typeof v === "number" && Number.isFinite(v) ? v : null));
+    }
+    if (typeof arr === "number") return [arr];
+    return batch.map(() => null);
+  } catch {
+    return batch.map(() => null);
+  }
+}
 
 export async function fetchTerrainHeights(
   coords: { lat: number; lng: number }[],
@@ -17,24 +36,15 @@ export async function fetchTerrainHeights(
   const result: (number | null)[] = [];
   for (let i = 0; i < coords.length; i += BATCH) {
     const batch = coords.slice(i, i + BATCH);
-    const locs = batch.map((c) => `${c.lat.toFixed(6)},${c.lng.toFixed(6)}`).join("|");
-    try {
-      const res = await fetch(`${ENDPOINT}?locations=${locs}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      for (const r of json.results ?? []) {
-        result.push(typeof r.elevation === "number" ? r.elevation : null);
-      }
-    } catch {
-      for (let k = 0; k < batch.length; k++) result.push(null);
-    }
+    const part = await fetchBatch(batch);
+    // dopasuj długość na wypadek krótkiej odpowiedzi
+    for (let k = 0; k < batch.length; k++) result.push(part[k] ?? null);
     onProgress?.(Math.min(i + BATCH, coords.length), coords.length);
-    if (i + BATCH < coords.length) await sleep(RATE_DELAY_MS);
   }
   return result;
 }
 
 export async function fetchTerrainHeight(lat: number, lng: number): Promise<number | null> {
-  const [height] = await fetchTerrainHeights([{ lat, lng }]);
-  return height ?? null;
+  const [h] = await fetchTerrainHeights([{ lat, lng }]);
+  return h ?? null;
 }
