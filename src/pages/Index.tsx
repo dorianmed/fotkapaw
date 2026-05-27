@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
 import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
-import { fetchTerrainHeights } from "@/lib/terrainUtils";
+import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -42,6 +42,7 @@ const Index = () => {
   const [measurementResetSignal, setMeasurementResetSignal] = useState(0);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [clickedTerrainHeight, setClickedTerrainHeight] = useState<{ loading: boolean; value: number | null } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
   const [useDemForAgl, setUseDemForAgl] = useState(false);
@@ -50,6 +51,7 @@ const Index = () => {
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
   const [wmsPixelInfo, setWmsPixelInfo] = useState<{ layer: string; info: string } | null>(null);
+  const terrainClickRequestRef = useRef(0);
 
   // Drawing layer model
   const [drawingLayers, setDrawingLayers] = useState<DrawingLayer[]>([]);
