@@ -155,7 +155,8 @@ const Index = () => {
       }
       aglSum += altitudeAGL; aglN++;
 
-      const estimated = estimateSensorDimensions(exif);
+      const terrainHeight = terrainHeights?.[i] ?? null;
+      const estimated = estimateSensorDimensions(exif, file.name);
       const currentSensor: SensorConfig = {
         resolutionX: estimated.resX, resolutionY: estimated.resY,
         sensorWidth: estimated.width, sensorHeight: estimated.height,
@@ -169,6 +170,8 @@ const Index = () => {
         id: `${file.name}-${Date.now()}-${Math.random()}`,
         filename: file.name, lat: exif.latitude, lng: exif.longitude,
         altitude: exif.GPSAltitude,
+        altitudeAGL,
+        terrainHeight,
         timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
         footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
         gsd: calcGSD(currentSensor, altitudeAGL),
