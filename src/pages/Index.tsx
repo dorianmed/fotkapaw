@@ -291,31 +291,6 @@ const Index = () => {
   const handleRenameDrawLayer = useCallback((id: string, name: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, name } : l)), []);
   const handleChangeDrawLayerColor = useCallback((id: string, color: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, color } : l)), []);
 
-  const handleMapClickForDrawing = useCallback((lat: number, lng: number) => {
-    if (!activeDrawLayer) return;
-    if (activeDrawLayer.type === "point") {
-      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
-        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: [[lat, lng]], attrs: { name: `Punkt ${l.features.length + 1}`, description: "" } }],
-      }));
-    } else {
-      setDrawingPoints((prev) => {
-        // auto-close polygon: click near first vertex
-        if (activeDrawLayer.type === "polygon" && prev.length >= 3) {
-          const [flat, flng] = prev[0];
-          const dLat = (flat - lat) * 111000;
-          const dLng = (flng - lng) * 111000 * Math.cos((lat * Math.PI) / 180);
-          if (Math.sqrt(dLat * dLat + dLng * dLng) < 8) {
-            // trigger finalize in next tick
-            setTimeout(() => finalizeDrawingNow(), 0);
-            return prev;
-          }
-        }
-        return [...prev, [lat, lng]];
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDrawLayer]);
-
   const finalizeDrawingNow = useCallback(() => {
     const layer = activeDrawLayer;
     if (!layer) return;
@@ -338,6 +313,28 @@ const Index = () => {
       return [];
     });
   }, [activeDrawLayer]);
+
+  const handleMapClickForDrawing = useCallback((lat: number, lng: number) => {
+    if (!activeDrawLayer) return;
+    if (activeDrawLayer.type === "point") {
+      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
+        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: [[lat, lng]], attrs: { name: `Punkt ${l.features.length + 1}`, description: "" } }],
+      }));
+    } else {
+      setDrawingPoints((prev) => {
+        if (activeDrawLayer.type === "polygon" && prev.length >= 3) {
+          const [flat, flng] = prev[0];
+          const dLat = (flat - lat) * 111000;
+          const dLng = (flng - lng) * 111000 * Math.cos((lat * Math.PI) / 180);
+          if (Math.sqrt(dLat * dLat + dLng * dLng) < 8) {
+            setTimeout(() => finalizeDrawingNow(), 0);
+            return prev;
+          }
+        }
+        return [...prev, [lat, lng]];
+      });
+    }
+  }, [activeDrawLayer, finalizeDrawingNow]);
 
   const handleMapDblClickForDrawing = useCallback(() => {
     if (!activeDrawLayer || activeDrawLayer.type === "point") return;
