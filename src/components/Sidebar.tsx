@@ -417,13 +417,19 @@ const Sidebar = ({
         </div>
         {baseLayer === "wms" && (
           <div className="space-y-1 rounded border p-2">
-            <Label className="text-[10px] text-muted-foreground">Adres WMS (GetCapabilities)</Label>
+            <Label className="text-[10px] text-muted-foreground">Adres WMS (GetCapabilities) – edytowalny</Label>
             <Input className="h-7 text-xs font-mono" value={wmsUrl}
               onChange={(e) => onWmsUrlChange(e.target.value)} placeholder="https://.../wms" />
-            <Button size="sm" variant="outline" className="w-full h-7 text-xs"
-              onClick={onWmsLoadLayers} disabled={!wmsUrl || wmsLoading}>
-              {wmsLoading ? "Pobieranie..." : "Pobierz warstwy"}
-            </Button>
+            <div className="flex gap-1">
+              <Button size="sm" variant="outline" className="flex-1 h-7 text-xs"
+                onClick={onWmsLoadLayers} disabled={!wmsUrl || wmsLoading}>
+                {wmsLoading ? "Pobieranie..." : "Pobierz warstwy"}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs"
+                onClick={() => onWmsUrlChange("https://sh.dataspace.copernicus.eu/ogc/wms/2a3dca8e-5210-4752-ba0f-cd3300dee17d")}>
+                Domyślny
+              </Button>
+            </div>
             {wmsLayers.length > 0 && (
               <div>
                 <Label className="text-[10px] text-muted-foreground">Warstwa ({wmsLayers.length})</Label>
