@@ -343,6 +343,22 @@ const Index = () => {
     finalizeDrawingNow();
   }, [activeDrawLayer, finalizeDrawingNow]);
 
+  const handleMapClickInfo = useCallback((lat: number, lng: number) => {
+    setClickedCoords({ lat, lng });
+    setClickedTerrainHeight({ loading: true, value: null });
+    setWmsPixelInfo(null);
+    handleMapClickForDrawing(lat, lng);
+
+    const requestId = ++terrainClickRequestRef.current;
+    fetchTerrainHeight(lat, lng)
+      .then((value) => {
+        if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value });
+      })
+      .catch(() => {
+        if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value: null });
+      });
+  }, [handleMapClickForDrawing]);
+
   // ESC: finalize in-progress drawing and deactivate layer (exit drawing mode)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
