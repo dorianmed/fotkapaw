@@ -635,6 +635,11 @@ const Index = () => {
               <div className="font-mono leading-relaxed">
                 <div>{coords.line1}</div>
                 <div>{coords.line2}</div>
+                {clickedPhotoAltitude !== null && (
+                  <div className="mt-1 pt-1 border-t text-[11px] text-primary">
+                    Wys. GPS zdjęcia: {clickedPhotoAltitude.toFixed(1)} m n.p.m.
+                  </div>
+                )}
                 {clickedTerrainHeight && (
                   <div className="mt-1 pt-1 border-t text-[11px] text-muted-foreground">
                     Teren DEM: {clickedTerrainHeight.loading ? "pobieram…" : clickedTerrainHeight.value !== null ? `${clickedTerrainHeight.value.toFixed(1)} m n.p.m.` : "brak danych"}
