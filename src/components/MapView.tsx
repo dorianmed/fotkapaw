@@ -316,14 +316,18 @@ const MapView = ({
     const selectedSet = new Set(selectedPhotoIds);
     const allOverlapping = new Map<string, { forward: number; lateral: number }>();
 
-    for (const selectedId of selectedPhotoIds) {
-      const selectedPhoto = photos.find((p) => p.id === selectedId);
-      if (!selectedPhoto) continue;
-      const overlaps = findOverlappingPhotos(selectedPhoto, photos);
-      for (const overlap of overlaps) {
-        const existing = allOverlapping.get(overlap.photo.id);
-        if (!existing || overlap.forward + overlap.lateral > existing.forward + existing.lateral) {
-          allOverlapping.set(overlap.photo.id, { forward: overlap.forward, lateral: overlap.lateral });
+    // Sąsiadów na zielono pokazuj TYLKO przy porównaniu (>=2 zaznaczone).
+    // Pojedynczy klik podświetla tylko klikniete zdjęcie.
+    if (selectedPhotoIds.length >= 2) {
+      for (const selectedId of selectedPhotoIds) {
+        const selectedPhoto = photos.find((p) => p.id === selectedId);
+        if (!selectedPhoto) continue;
+        const overlaps = findOverlappingPhotos(selectedPhoto, photos);
+        for (const overlap of overlaps) {
+          const existing = allOverlapping.get(overlap.photo.id);
+          if (!existing || overlap.forward + overlap.lateral > existing.forward + existing.lateral) {
+            allOverlapping.set(overlap.photo.id, { forward: overlap.forward, lateral: overlap.lateral });
+          }
         }
       }
     }
