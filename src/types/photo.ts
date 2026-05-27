@@ -4,6 +4,8 @@ export interface PhotoPoint {
   lat: number;
   lng: number;
   altitude?: number;
+  altitudeAGL?: number;
+  terrainHeight?: number | null;
   timestamp?: Date;
   heading?: number;
   speed?: number;
