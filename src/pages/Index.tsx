@@ -569,7 +569,7 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
-          onMapClick={(lat, lng) => { setClickedCoords({ lat, lng }); setWmsPixelInfo(null); handleMapClickForDrawing(lat, lng); }}
+          onMapClick={handleMapClickInfo}
           onMapDblClick={handleMapDblClickForDrawing}
           coverageGaps={coverageGaps}
           drawingLayers={drawingLayers}
@@ -632,6 +632,11 @@ const Index = () => {
               <div className="font-mono leading-relaxed">
                 <div>{coords.line1}</div>
                 <div>{coords.line2}</div>
+                {clickedTerrainHeight && (
+                  <div className="mt-1 pt-1 border-t text-[11px] text-muted-foreground">
+                    Teren DEM: {clickedTerrainHeight.loading ? "pobieram…" : clickedTerrainHeight.value !== null ? `${clickedTerrainHeight.value.toFixed(1)} m n.p.m.` : "brak danych"}
+                  </div>
+                )}
                 {wmsPixelInfo && (
                   <div className="mt-1 pt-1 border-t text-[11px] text-primary break-all">
                     <span className="text-muted-foreground">{wmsPixelInfo.layer}:</span> {wmsPixelInfo.info}
