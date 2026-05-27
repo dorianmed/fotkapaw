@@ -15,7 +15,7 @@ type OverlapCandidate = {
  */
 const KNOWN_CAMERAS: { match: string; width: number; height: number; focal?: number }[] = [
   // DJI Phantom 4 Multispectral (każda z 6 kamer: RGB + 5x MS)
-  { match: "FC6360", width: 4.87, height: 3.96, focal: 5.74 },
+  { match: "FC6360", width: 5.0, height: 3.75, focal: 5.73 },
   // DJI Phantom 4 Pro / Advanced (1")
   { match: "FC6310", width: 13.2, height: 8.8, focal: 8.8 },
   { match: "FC330",  width: 6.17, height: 4.55, focal: 3.61 }, // P4 standard
@@ -36,11 +36,20 @@ const KNOWN_CAMERAS: { match: string; width: number; height: number; focal?: num
   { match: "Altum",   width: 7.12, height: 5.33, focal: 8.0 },
 ];
 
+const MULTISPECTRAL_NAME_RE = /(^|[_-])\d{1,2}\.(tif|tiff)$/i;
+
+export function looksLikeMultispectralBand(filename?: string, exif?: any) {
+  const name = filename ?? "";
+  const widthPx = Number(exif?.ExifImageWidth || exif?.PixelXDimension || exif?.ImageWidth || 0);
+  const heightPx = Number(exif?.ExifImageHeight || exif?.PixelYDimension || exif?.ImageHeight || 0);
+  return MULTISPECTRAL_NAME_RE.test(name) || (widthPx === 1280 && heightPx === 960 && !exif?.Model && !exif?.FocalLength);
+}
+
 /**
  * Estymacja wymiarów sensora z EXIF.
  * Priorytet: znana kamera (Model) -> sensor wprost z EXIF -> 35mm equiv -> FocalPlaneRes -> fallback.
  */
-export function estimateSensorDimensions(exif: any) {
+export function estimateSensorDimensions(exif: any, filename?: string) {
   const widthPx = exif.ExifImageWidth || exif.PixelXDimension || exif.ImageWidth || 4000;
   const heightPx = exif.ExifImageHeight || exif.PixelYDimension || exif.ImageHeight || 3000;
   const focal35 = Number(exif.FocalLengthIn35mmFormat);
@@ -48,6 +57,13 @@ export function estimateSensorDimensions(exif: any) {
   const exifSensorWidth = Number(exif.SensorWidth || exif.sensorWidth);
   const exifSensorHeight = Number(exif.SensorHeight || exif.sensorHeight);
   const model = String(exif.Model || exif.model || "").trim();
+
+  if (looksLikeMultispectralBand(filename, exif)) {
+    return {
+      width: 5.0, height: 3.75, focal: focalReal > 0 ? focalReal : 5.73,
+      resX: widthPx, resY: heightPx, source: "estimated" as const,
+    };
+  }
 
   // 1) Znana kamera po Model
   if (model) {
