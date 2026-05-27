@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
@@ -6,7 +6,7 @@ import { Camera, Menu, X } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
-import { analyzeOverlap, assignHeadings, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
+import { analyzeOverlap, assignHeadings, calcDistance, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
 import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
-import { fetchTerrainHeights } from "@/lib/terrainUtils";
+import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -42,6 +42,8 @@ const Index = () => {
   const [measurementResetSignal, setMeasurementResetSignal] = useState(0);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [clickedPhotoAltitude, setClickedPhotoAltitude] = useState<number | null>(null);
+  const [clickedTerrainHeight, setClickedTerrainHeight] = useState<{ loading: boolean; value: number | null } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
   const [useDemForAgl, setUseDemForAgl] = useState(false);
@@ -50,6 +52,7 @@ const Index = () => {
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
   const [wmsPixelInfo, setWmsPixelInfo] = useState<{ layer: string; info: string } | null>(null);
+  const terrainClickRequestRef = useRef(0);
 
   // Drawing layer model
   const [drawingLayers, setDrawingLayers] = useState<DrawingLayer[]>([]);
@@ -153,7 +156,8 @@ const Index = () => {
       }
       aglSum += altitudeAGL; aglN++;
 
-      const estimated = estimateSensorDimensions(exif);
+      const terrainHeight = terrainHeights?.[i] ?? null;
+      const estimated = estimateSensorDimensions(exif, file.name);
       const currentSensor: SensorConfig = {
         resolutionX: estimated.resX, resolutionY: estimated.resY,
         sensorWidth: estimated.width, sensorHeight: estimated.height,
@@ -167,6 +171,8 @@ const Index = () => {
         id: `${file.name}-${Date.now()}-${Math.random()}`,
         filename: file.name, lat: exif.latitude, lng: exif.longitude,
         altitude: exif.GPSAltitude,
+        altitudeAGL,
+        terrainHeight,
         timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
         footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
         gsd: calcGSD(currentSensor, altitudeAGL),
@@ -285,31 +291,6 @@ const Index = () => {
   const handleRenameDrawLayer = useCallback((id: string, name: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, name } : l)), []);
   const handleChangeDrawLayerColor = useCallback((id: string, color: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, color } : l)), []);
 
-  const handleMapClickForDrawing = useCallback((lat: number, lng: number) => {
-    if (!activeDrawLayer) return;
-    if (activeDrawLayer.type === "point") {
-      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
-        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: [[lat, lng]], attrs: { name: `Punkt ${l.features.length + 1}`, description: "" } }],
-      }));
-    } else {
-      setDrawingPoints((prev) => {
-        // auto-close polygon: click near first vertex
-        if (activeDrawLayer.type === "polygon" && prev.length >= 3) {
-          const [flat, flng] = prev[0];
-          const dLat = (flat - lat) * 111000;
-          const dLng = (flng - lng) * 111000 * Math.cos((lat * Math.PI) / 180);
-          if (Math.sqrt(dLat * dLat + dLng * dLng) < 8) {
-            // trigger finalize in next tick
-            setTimeout(() => finalizeDrawingNow(), 0);
-            return prev;
-          }
-        }
-        return [...prev, [lat, lng]];
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDrawLayer]);
-
   const finalizeDrawingNow = useCallback(() => {
     const layer = activeDrawLayer;
     if (!layer) return;
@@ -333,10 +314,50 @@ const Index = () => {
     });
   }, [activeDrawLayer]);
 
+  const handleMapClickForDrawing = useCallback((lat: number, lng: number) => {
+    if (!activeDrawLayer) return;
+    if (activeDrawLayer.type === "point") {
+      setDrawingLayers((prev) => prev.map((l) => l.id !== activeDrawLayer.id ? l : {
+        ...l, features: [...l.features, { id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, coordinates: [[lat, lng]], attrs: { name: `Punkt ${l.features.length + 1}`, description: "" } }],
+      }));
+    } else {
+      setDrawingPoints((prev) => {
+        if (activeDrawLayer.type === "polygon" && prev.length >= 3) {
+          const [flat, flng] = prev[0];
+          const dLat = (flat - lat) * 111000;
+          const dLng = (flng - lng) * 111000 * Math.cos((lat * Math.PI) / 180);
+          if (Math.sqrt(dLat * dLat + dLng * dLng) < 8) {
+            setTimeout(() => finalizeDrawingNow(), 0);
+            return prev;
+          }
+        }
+        return [...prev, [lat, lng]];
+      });
+    }
+  }, [activeDrawLayer, finalizeDrawingNow]);
+
   const handleMapDblClickForDrawing = useCallback(() => {
     if (!activeDrawLayer || activeDrawLayer.type === "point") return;
     finalizeDrawingNow();
   }, [activeDrawLayer, finalizeDrawingNow]);
+
+  const handleMapClickInfo = useCallback((lat: number, lng: number) => {
+    setClickedCoords({ lat, lng });
+    const photoAtPoint = photos.find((photo) => calcDistance(lat, lng, photo.lat, photo.lng) <= 1);
+    setClickedPhotoAltitude(photoAtPoint?.altitude ?? null);
+    setClickedTerrainHeight({ loading: true, value: null });
+    setWmsPixelInfo(null);
+    handleMapClickForDrawing(lat, lng);
+
+    const requestId = ++terrainClickRequestRef.current;
+    fetchTerrainHeight(lat, lng)
+      .then((value) => {
+        if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value });
+      })
+      .catch(() => {
+        if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value: null });
+      });
+  }, [handleMapClickForDrawing, photos]);
 
   // ESC: finalize in-progress drawing and deactivate layer (exit drawing mode)
   useEffect(() => {
@@ -548,7 +569,7 @@ const Index = () => {
           measureMode={measureMode}
           measurementResetSignal={measurementResetSignal}
           onMeasurementChange={setMeasurement}
-          onMapClick={(lat, lng) => { setClickedCoords({ lat, lng }); setWmsPixelInfo(null); handleMapClickForDrawing(lat, lng); }}
+          onMapClick={handleMapClickInfo}
           onMapDblClick={handleMapDblClickForDrawing}
           coverageGaps={coverageGaps}
           drawingLayers={drawingLayers}
@@ -611,6 +632,16 @@ const Index = () => {
               <div className="font-mono leading-relaxed">
                 <div>{coords.line1}</div>
                 <div>{coords.line2}</div>
+                {clickedPhotoAltitude !== null && (
+                  <div className="mt-1 pt-1 border-t text-[11px] text-primary">
+                    Wys. GPS zdjęcia: {clickedPhotoAltitude.toFixed(1)} m n.p.m.
+                  </div>
+                )}
+                {clickedTerrainHeight && (
+                  <div className="mt-1 pt-1 border-t text-[11px] text-muted-foreground">
+                    Teren DEM: {clickedTerrainHeight.loading ? "pobieram…" : clickedTerrainHeight.value !== null ? `${clickedTerrainHeight.value.toFixed(1)} m n.p.m.` : "brak danych"}
+                  </div>
+                )}
                 {wmsPixelInfo && (
                   <div className="mt-1 pt-1 border-t text-[11px] text-primary break-all">
                     <span className="text-muted-foreground">{wmsPixelInfo.layer}:</span> {wmsPixelInfo.info}

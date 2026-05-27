@@ -348,11 +348,8 @@ const MapView = ({
 
       let popupContent = `<b>${photo.filename}</b><br/>Lat: ${photo.lat.toFixed(6)}<br/>Lng: ${photo.lng.toFixed(6)}<br/>Zasięg: ${photo.footprintWidth.toFixed(1)}m × ${photo.footprintHeight.toFixed(1)}m`;
       if (photo.altitude !== undefined) popupContent += `<br/>Wys. GPS (MSL): ${photo.altitude.toFixed(1)} m`;
-      if (photo.sensorInfo && photo.gsd) {
-        // AGL = GSD * focal / (pixelSize_mm * 100) ; szybciej: groundWidth = sensorW/f * AGL -> AGL = footprintW * f / sensorW
-        const agl = (photo.footprintWidth * photo.sensorInfo.focalLength) / photo.sensorInfo.sensorWidth;
-        popupContent += `<br/><b>Wys. lotu (AGL): ${agl.toFixed(1)} m</b>`;
-      }
+      if (photo.terrainHeight !== undefined && photo.terrainHeight !== null) popupContent += `<br/>Teren DEM: ${photo.terrainHeight.toFixed(1)} m`;
+      if (photo.altitudeAGL !== undefined) popupContent += `<br/><b>Wys. lotu (AGL): ${photo.altitudeAGL.toFixed(1)} m</b>`;
       if (photo.speed !== undefined) popupContent += `<br/>Prędkość: ${photo.speed.toFixed(1)} m/s`;
       if (photo.gsd !== undefined) popupContent += `<br/>GSD: ${photo.gsd.toFixed(2)} cm/px`;
       if (photo.heading !== undefined) popupContent += `<br/>Kurs: ${photo.heading.toFixed(1)}°`;
@@ -375,6 +372,7 @@ const MapView = ({
       marker.off("click");
       marker.on("click", (event) => {
         const mouseEvent = event.originalEvent as MouseEvent;
+        onMapClickRef.current?.(photo.lat, photo.lng);
         if (measureModeRef.current !== "none") {
           addMeasurementPoint(photo.lat, photo.lng);
           L.DomEvent.stop(event);

@@ -33,3 +33,8 @@ export async function fetchTerrainHeights(
   }
   return result;
 }
+
+export async function fetchTerrainHeight(lat: number, lng: number): Promise<number | null> {
+  const [height] = await fetchTerrainHeights([{ lat, lng }]);
+  return height ?? null;
+}
