@@ -6,7 +6,7 @@ import { Camera, Menu, X } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
-import { analyzeOverlap, assignHeadings, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
+import { analyzeOverlap, assignHeadings, calcDistance, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ const Index = () => {
   const [measurementResetSignal, setMeasurementResetSignal] = useState(0);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [clickedPhotoAltitude, setClickedPhotoAltitude] = useState<number | null>(null);
   const [clickedTerrainHeight, setClickedTerrainHeight] = useState<{ loading: boolean; value: number | null } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
@@ -345,6 +346,8 @@ const Index = () => {
 
   const handleMapClickInfo = useCallback((lat: number, lng: number) => {
     setClickedCoords({ lat, lng });
+    const photoAtPoint = photos.find((photo) => calcDistance(lat, lng, photo.lat, photo.lng) <= 1);
+    setClickedPhotoAltitude(photoAtPoint?.altitude ?? null);
     setClickedTerrainHeight({ loading: true, value: null });
     setWmsPixelInfo(null);
     handleMapClickForDrawing(lat, lng);
@@ -357,7 +360,7 @@ const Index = () => {
       .catch(() => {
         if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value: null });
       });
-  }, [handleMapClickForDrawing]);
+  }, [handleMapClickForDrawing, photos]);
 
   // ESC: finalize in-progress drawing and deactivate layer (exit drawing mode)
   useEffect(() => {
