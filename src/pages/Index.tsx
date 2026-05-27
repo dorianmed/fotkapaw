@@ -255,22 +255,6 @@ const Index = () => {
     setCoverageGaps([]);
   }, []);
 
-  const handleMapClickInfo = useCallback((lat: number, lng: number) => {
-    setClickedCoords({ lat, lng });
-    setClickedTerrainHeight({ loading: true, value: null });
-    setWmsPixelInfo(null);
-    handleMapClickForDrawing(lat, lng);
-
-    const requestId = ++terrainClickRequestRef.current;
-    fetchTerrainHeight(lat, lng)
-      .then((value) => {
-        if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value });
-      })
-      .catch(() => {
-        if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value: null });
-      });
-  }, [handleMapClickForDrawing]);
-
   const handleImportVector = useCallback(async (file: File) => {
     try {
       const ext = file.name.split(".").pop()?.toLowerCase();
