@@ -375,6 +375,7 @@ const MapView = ({
       marker.off("click");
       marker.on("click", (event) => {
         const mouseEvent = event.originalEvent as MouseEvent;
+        onMapClickRef.current?.(photo.lat, photo.lng);
         if (measureModeRef.current !== "none") {
           addMeasurementPoint(photo.lat, photo.lng);
           L.DomEvent.stop(event);
