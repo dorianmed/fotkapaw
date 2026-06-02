@@ -36,8 +36,6 @@ interface SidebarProps {
   selectedOverlapStats: OverlapStats | null;
   measureMode: MeasureMode;
   measurement: MeasurementSummary | null;
-  drawingLayers: DrawingLayer[];
-  activeDrawLayerId: string | null;
   onImportPhotos: (files: FileList) => void;
   onImportKml: (file: File) => void;
   onImportVector: (file: File) => void;
