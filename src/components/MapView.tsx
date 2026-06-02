@@ -41,6 +41,11 @@ interface MapViewProps {
   selectedFeatureId?: string | null;
   onFeatureClick?: (layerId: string, featureId: string) => void;
   onWmsPixelInfo?: (layerName: string, info: string) => void;
+  selectMode?: boolean;
+  selectedFeatureRefs?: string[];
+  onToggleSelectFeature?: (layerId: string, featureId: string) => void;
+  onFenceSelect?: (refs: { layerId: string; featureId: string }[]) => void;
+  onClearSelection?: () => void;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
