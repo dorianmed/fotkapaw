@@ -17,5 +17,7 @@ export interface DrawingLayer {
   type: "point" | "line" | "polygon";
   visible: boolean;
   color: string;
+  /** Domyślny układ współrzędnych warstwy (do eksportu). */
+  crs?: "wgs84" | "puwg1992" | "puwg2000";
   features: DrawnFeature[];
 }

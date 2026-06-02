@@ -36,8 +36,6 @@ interface SidebarProps {
   selectedOverlapStats: OverlapStats | null;
   measureMode: MeasureMode;
   measurement: MeasurementSummary | null;
-  drawingLayers: DrawingLayer[];
-  activeDrawLayerId: string | null;
   onImportPhotos: (files: FileList) => void;
   onImportKml: (file: File) => void;
   onImportVector: (file: File) => void;
@@ -59,17 +57,6 @@ interface SidebarProps {
   onCheckCoverage: (kmlId: string) => void;
   onClearCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
-  onAddDrawLayer: (type: "point" | "line" | "polygon") => void;
-  onSetActiveDrawLayer: (id: string | null) => void;
-  onToggleDrawLayer: (id: string) => void;
-  onRemoveDrawLayer: (id: string) => void;
-  onRenameDrawLayer: (id: string, name: string) => void;
-  onChangeDrawLayerColor: (id: string, color: string) => void;
-  onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt", epsg?: CoordinateSystem, onlyFeatureId?: string) => void;
-  onSelectFeature: (layerId: string, featureId: string) => void;
-  onFinishDrawing: () => void;
-  drawingInProgressCount: number;
-  selectedFeature: { layerId: string; featureId: string } | null;
 }
 
 const exportKml = (layer: KmlLayer) => {
@@ -132,22 +119,12 @@ const Sidebar = ({
   wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
   onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
   overlapStats, selectedPhotoCount, selectedOverlapStats, measureMode, measurement,
-  drawingLayers, activeDrawLayerId,
   onImportPhotos, onImportKml, onImportVector,
   onToggleFootprints, onFootprintStyleChange, onToggleOverlap, onBaseLayerChange,
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
   onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
-  onAddDrawLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
-  onRenameDrawLayer, onChangeDrawLayerColor, onExportDrawLayer, onSelectFeature,
-  onFinishDrawing, drawingInProgressCount, selectedFeature,
 }: SidebarProps) => {
-  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
-  const [expandedFeatureLists, setExpandedFeatureLists] = useState<Record<string, boolean>>({});
-  const [exportEpsg, setExportEpsg] = useState<CoordinateSystem>("wgs84");
-  const activeLayer = drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null;
-  const drawMode = activeLayer?.type ?? "none";
-
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
     : undefined;
@@ -159,8 +136,6 @@ const Sidebar = ({
     : undefined;
   const exifSensorCount = photos.filter((p) => p.sensorInfo?.source !== "fallback").length;
 
-  const typeIcon = (t: string) => t === "point" ? <CircleDot className="h-3 w-3" /> : t === "line" ? <Minus className="h-3 w-3" /> : <Square className="h-3 w-3" />;
-  const typeLabel = (t: string) => t === "point" ? "Punktowa" : t === "line" ? "Liniowa" : "Powierzchniowa";
 
   return (
     <div className="h-full w-80 space-y-3 overflow-y-auto border-r bg-card p-4">
@@ -297,117 +272,7 @@ const Sidebar = ({
         ))}
       </Section>
 
-      <Section icon={<PenTool className="h-4 w-4" />} title="Rysowanie" description="Twórz warstwy punktowe, liniowe i powierzchniowe z atrybutami.">
-        <div className="grid grid-cols-3 gap-1">
-          <Button variant="outline" size="sm" onClick={() => onAddDrawLayer("point")} title="Nowa warstwa punktowa">
-            <Plus className="h-3 w-3 mr-1" /><CircleDot className="h-3 w-3" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => onAddDrawLayer("line")} title="Nowa warstwa liniowa">
-            <Plus className="h-3 w-3 mr-1" /><Minus className="h-3 w-3" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => onAddDrawLayer("polygon")} title="Nowa warstwa powierzchniowa">
-            <Plus className="h-3 w-3 mr-1" /><Square className="h-3 w-3" />
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {activeDrawLayerId
-            ? "Klikaj na mapie. Linie/poligony: dblklik, klik na 1. wierzchołek lub przycisk Zakończ. ESC = wyjście."
-            : "Wybierz warstwę aby aktywować rysowanie."}
-        </p>
-        <div className="flex items-center gap-2 rounded border p-2">
-          <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Eksport EPSG:</Label>
-          <select
-            className="flex-1 h-7 text-xs rounded border bg-background px-1"
-            value={exportEpsg}
-            onChange={(e) => setExportEpsg(e.target.value as CoordinateSystem)}
-          >
-            {EXPORT_EPSG.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
-          <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
-            Zakończ ({drawingInProgressCount} pkt)
-          </Button>
-        )}
-        {drawingLayers.length === 0 && (
-          <p className="text-xs italic text-muted-foreground">Brak warstw. Kliknij + powyżej.</p>
-        )}
-        {drawingLayers.map((dl) => {
-          const isActive = activeDrawLayerId === dl.id;
-          const isEditing = editingLayerId === dl.id;
-          return (
-            <div key={dl.id} className={`space-y-1 rounded-md border p-2 ${isActive ? "border-primary ring-1 ring-primary/40" : ""}`}>
-              <div className="flex items-center gap-1">
-                {typeIcon(dl.type)}
-                {isEditing ? (
-                  <Input
-                    autoFocus
-                    defaultValue={dl.name}
-                    className="h-6 text-xs flex-1"
-                    onBlur={(e) => { onRenameDrawLayer(dl.id, e.target.value || dl.name); setEditingLayerId(null); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingLayerId(null); }}
-                  />
-                ) : (
-                  <span
-                    className="flex-1 cursor-pointer truncate text-xs font-medium text-foreground"
-                    onClick={() => onSetActiveDrawLayer(isActive ? null : dl.id)}
-                    title="Kliknij aby aktywować rysowanie"
-                  >
-                    {dl.name} <span className="text-muted-foreground">({dl.features.length})</span>
-                  </span>
-                )}
-                <input type="color" value={dl.color} onChange={(e) => onChangeDrawLayerColor(dl.id, e.target.value)} className="h-5 w-5 cursor-pointer rounded border-0 p-0" title="Kolor" />
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingLayerId(dl.id)} title="Zmień nazwę"><Edit2 className="h-3 w-3" /></Button>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onToggleDrawLayer(dl.id)}>
-                  {dl.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemoveDrawLayer(dl.id)}><Trash2 className="h-3 w-3" /></Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground pl-4">{typeLabel(dl.type)}</p>
-              {dl.features.length > 0 && (
-                <div className="border-t pt-1">
-                  <button
-                    onClick={() => setExpandedFeatureLists((p) => ({ ...p, [dl.id]: !p[dl.id] }))}
-                    className="flex w-full items-center justify-between text-[10px] text-muted-foreground hover:text-foreground px-1 py-0.5"
-                  >
-                    <span>Obiekty ({dl.features.length})</span>
-                    {expandedFeatureLists[dl.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  </button>
-                  {expandedFeatureLists[dl.id] && (
-                    <div className="max-h-32 overflow-y-auto space-y-0.5 mt-1">
-                      {dl.features.map((f, i) => (
-                        <button
-                          key={f.id}
-                          onClick={() => onSelectFeature(dl.id, f.id)}
-                          className="flex w-full items-center justify-between rounded px-1 py-0.5 text-[10px] hover:bg-muted text-left"
-                        >
-                          <span className="truncate text-foreground">{f.attrs.name || `${i + 1}`}</span>
-                          <span className="text-muted-foreground font-mono">{f.coordinates.length}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {dl.features.length > 0 && (() => {
-                const sel = selectedFeature?.layerId === dl.id ? selectedFeature.featureId : undefined;
-                const label = sel ? "obiekt" : "warstwa";
-                return (
-                  <div className="space-y-1 pt-1">
-                    <p className="text-[10px] text-muted-foreground">Eksport ({label}{sel ? "" : ` ${dl.features.length} obj.`}):</p>
-                    <div className="grid grid-cols-2 gap-1">
-                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "kml", exportEpsg, sel)}>KML</Button>
-                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "dxf", exportEpsg, sel)}>DXF</Button>
-                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "geojson", exportEpsg, sel)}>GeoJSON</Button>
-                      <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => onExportDrawLayer(dl.id, "txt", exportEpsg, sel)}>TXT</Button>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          );
-        })}
-      </Section>
+
 
       <Section icon={<Map className="h-4 w-4" />} title="Podkład mapy" description="Wybierz mapę bazową i styl zasięgów.">
         <div className="grid grid-cols-3 gap-1">

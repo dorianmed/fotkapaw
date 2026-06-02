@@ -41,6 +41,11 @@ interface MapViewProps {
   selectedFeatureId?: string | null;
   onFeatureClick?: (layerId: string, featureId: string) => void;
   onWmsPixelInfo?: (layerName: string, info: string) => void;
+  selectMode?: boolean;
+  selectedFeatureRefs?: string[];
+  onToggleSelectFeature?: (layerId: string, featureId: string) => void;
+  onFenceSelect?: (refs: { layerId: string; featureId: string }[]) => void;
+  onClearSelection?: () => void;
 }
 
 const getThemeColor = (token: string, fallback: string) => {
@@ -72,6 +77,11 @@ const MapView = ({
   selectedFeatureId = null,
   onFeatureClick,
   onWmsPixelInfo,
+  selectMode = false,
+  selectedFeatureRefs = [],
+  onToggleSelectFeature,
+  onFenceSelect,
+  onClearSelection,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,6 +98,11 @@ const MapView = ({
   const wmsUrlRef = useRef(wmsUrl);
   const wmsLayerNameRef = useRef(wmsLayer);
   const onWmsPixelInfoRef = useRef(onWmsPixelInfo);
+  const selectModeRef = useRef(selectMode);
+  const onToggleSelectFeatureRef = useRef(onToggleSelectFeature);
+  const onFenceSelectRef = useRef(onFenceSelect);
+  const onClearSelectionRef = useRef(onClearSelection);
+  const drawingLayersRef = useRef(drawingLayers);
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
@@ -212,6 +227,8 @@ const MapView = ({
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
+      // W trybie zaznaczania klik obsługuje logika fence (mousedown/up).
+      if (selectModeRef.current) return;
       onMapClickRef.current?.(event.latlng.lat, event.latlng.lng);
       if (measureModeRef.current !== "none") {
         addMeasurementPoint(event.latlng.lat, event.latlng.lng);
@@ -228,14 +245,65 @@ const MapView = ({
       L.DomEvent.stop(event);
     };
 
+    // ── Zaznaczanie ogrodzeniem (fence) ──
+    let fenceStart: L.LatLng | null = null;
+    let fenceRect: L.Rectangle | null = null;
+    let fenceMoved = false;
+
+    const handleMouseDown = (event: L.LeafletMouseEvent) => {
+      if (!selectModeRef.current) return;
+      fenceStart = event.latlng;
+      fenceMoved = false;
+      map.dragging.disable();
+    };
+
+    const handleMouseMove = (event: L.LeafletMouseEvent) => {
+      if (!fenceStart) return;
+      fenceMoved = true;
+      const bounds = L.latLngBounds(fenceStart, event.latlng);
+      if (fenceRect) fenceRect.setBounds(bounds);
+      else fenceRect = L.rectangle(bounds, { color: "#3b82f6", weight: 1, dashArray: "4 4", fillOpacity: 0.1 }).addTo(map);
+    };
+
+    const handleMouseUp = () => {
+      if (!selectModeRef.current) return;
+      map.dragging.enable();
+      if (fenceStart) {
+        if (fenceMoved && fenceRect) {
+          const bounds = fenceRect.getBounds();
+          const refs: { layerId: string; featureId: string }[] = [];
+          for (const dl of drawingLayersRef.current) {
+            if (!dl.visible) continue;
+            for (const f of dl.features) {
+              if (f.coordinates.some(([lat, lng]) => bounds.contains([lat, lng]))) {
+                refs.push({ layerId: dl.id, featureId: f.id });
+              }
+            }
+          }
+          onFenceSelectRef.current?.(refs);
+        } else {
+          onClearSelectionRef.current?.();
+        }
+      }
+      fenceStart = null;
+      if (fenceRect) { map.removeLayer(fenceRect); fenceRect = null; }
+      fenceMoved = false;
+    };
+
     window.addEventListener("zoom-to-bounds", handleZoom);
     map.on("click", handleMapClick);
     map.on("dblclick", handleMapDblClick);
+    map.on("mousedown", handleMouseDown);
+    map.on("mousemove", handleMouseMove);
+    map.on("mouseup", handleMouseUp);
 
     return () => {
       window.removeEventListener("zoom-to-bounds", handleZoom);
       map.off("click", handleMapClick);
       map.off("dblclick", handleMapDblClick);
+      map.off("mousedown", handleMouseDown);
+      map.off("mousemove", handleMouseMove);
+      map.off("mouseup", handleMouseUp);
       map.remove();
       mapRef.current = null;
     };
@@ -249,6 +317,11 @@ const MapView = ({
     wmsUrlRef.current = wmsUrl;
     wmsLayerNameRef.current = wmsLayer;
     onWmsPixelInfoRef.current = onWmsPixelInfo;
+    selectModeRef.current = selectMode;
+    onToggleSelectFeatureRef.current = onToggleSelectFeature;
+    onFenceSelectRef.current = onFenceSelect;
+    onClearSelectionRef.current = onClearSelection;
+    drawingLayersRef.current = drawingLayers;
     // Build snap targets: photo centers/corners + drawing layer vertices
     const photoTargets = createPhotoSnapTargets(photos);
     const drawTargets = drawingLayers.flatMap((dl) =>
@@ -266,7 +339,7 @@ const MapView = ({
         : []
     );
     snapTargetsRef.current = [...photoTargets, ...drawTargets];
-  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers]);
+  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers, selectMode, onToggleSelectFeature, onFenceSelect, onClearSelection]);
 
   useEffect(() => {
     resetMeasurement();
@@ -516,15 +589,22 @@ const MapView = ({
     if (!layer) return;
     layer.clearLayers();
 
+    const selectedRefSet = new Set(selectedFeatureRefs);
     drawingLayers.forEach((dl) => {
       if (!dl.visible) return;
       dl.features.forEach((f) => {
-        const isSelected = selectedFeatureId === f.id;
+        const isMultiSelected = selectedRefSet.has(`${dl.id}:${f.id}`);
+        const isSelected = selectedFeatureId === f.id || isMultiSelected;
+        const drawColor = isMultiSelected ? "#f59e0b" : dl.color;
         const weight = isSelected ? 4 : 2;
         const tooltip = f.attrs.name || dl.name;
         const handleClick = (e: L.LeafletMouseEvent) => {
           if (measureModeRef.current !== "none") return;
           L.DomEvent.stop(e);
+          if (selectModeRef.current) {
+            onToggleSelectFeatureRef.current?.(dl.id, f.id);
+            return;
+          }
           onFeatureClick?.(dl.id, f.id);
         };
 
@@ -532,8 +612,8 @@ const MapView = ({
           const [lat, lng] = f.coordinates[0];
           const m = L.circleMarker([lat, lng], {
             radius: isSelected ? 8 : 6,
-            color: dl.color,
-            fillColor: dl.color,
+            color: drawColor,
+            fillColor: drawColor,
             fillOpacity: 0.85,
             weight,
           })
@@ -541,15 +621,15 @@ const MapView = ({
             .addTo(layer);
           m.on("click", handleClick);
         } else if (dl.type === "line" && f.coordinates.length >= 2) {
-          const m = L.polyline(f.coordinates, { color: dl.color, weight: weight + 1 })
+          const m = L.polyline(f.coordinates, { color: drawColor, weight: weight + 1 })
             .bindTooltip(tooltip, { direction: "top" })
             .addTo(layer);
           m.on("click", handleClick);
         } else if (dl.type === "polygon" && f.coordinates.length >= 3) {
           const m = L.polygon(f.coordinates, {
-            color: dl.color,
-            fillColor: dl.color,
-            fillOpacity: 0.2,
+            color: drawColor,
+            fillColor: drawColor,
+            fillOpacity: isMultiSelected ? 0.35 : 0.2,
             weight,
           })
             .bindTooltip(tooltip, { direction: "center" })
@@ -579,7 +659,7 @@ const MapView = ({
         L.polyline(drawingPoints, { color, weight: 2, dashArray: "6 4" }).addTo(layer);
       }
     }
-  }, [drawingLayers, drawingPoints, drawMode, selectedFeatureId, onFeatureClick]);
+  }, [drawingLayers, drawingPoints, drawMode, selectedFeatureId, onFeatureClick, selectedFeatureRefs]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 };

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
-import { Camera, Menu, X } from "lucide-react";
+import { Camera, Menu, X, MousePointer2, PanelRight } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
+import ToolsPanel from "@/components/ToolsPanel";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
 import { analyzeOverlap, assignHeadings, calcDistance, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
@@ -59,6 +60,20 @@ const Index = () => {
   const [activeDrawLayerId, setActiveDrawLayerId] = useState<string | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const [selectedFeature, setSelectedFeature] = useState<{ layerId: string; featureId: string } | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedFeatures, setSelectedFeatures] = useState<{ layerId: string; featureId: string }[]>([]);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
+
+  const selectedFeatureRefs = useMemo(() => selectedFeatures.map((s) => `${s.layerId}:${s.featureId}`), [selectedFeatures]);
+  const handleToggleSelectFeature = useCallback((layerId: string, featureId: string) => {
+    setSelectedFeatures((prev) =>
+      prev.some((s) => s.layerId === layerId && s.featureId === featureId)
+        ? prev.filter((s) => !(s.layerId === layerId && s.featureId === featureId))
+        : [...prev, { layerId, featureId }]
+    );
+  }, []);
+  const handleFenceSelect = useCallback((refs: { layerId: string; featureId: string }[]) => setSelectedFeatures(refs), []);
+  const handleClearSelection = useCallback(() => setSelectedFeatures([]), []);
 
   const activeDrawLayer = useMemo(() => drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null, [drawingLayers, activeDrawLayerId]);
   const drawMode = activeDrawLayer?.type ?? "none";
@@ -279,15 +294,24 @@ const Index = () => {
   }, []);
 
   // ---- Drawing layer handlers ----
-  const handleAddDrawLayer = useCallback((type: "point" | "line" | "polygon") => {
+  const handleCreateLayer = useCallback((opts: { name: string; type: "point" | "line" | "polygon"; crs: CoordinateSystem }): string => {
     const id = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const sameTypeCount = drawingLayers.filter((l) => l.type === type).length + 1;
-    const typeName = type === "point" ? "Punktowa" : type === "line" ? "Liniowa" : "Powierzchniowa";
-    const newLayer: DrawingLayer = { id, name: `${typeName} ${sameTypeCount}`, type, visible: true, color: LAYER_COLORS[type], features: [] };
+    const newLayer: DrawingLayer = { id, name: opts.name, type: opts.type, visible: true, color: LAYER_COLORS[opts.type], crs: opts.crs, features: [] };
     setDrawingLayers((prev) => [...prev, newLayer]);
     setActiveDrawLayerId(id);
     setDrawingPoints([]);
-  }, [drawingLayers]);
+    return id;
+  }, []);
+
+  const handleAddFeatureToLayer = useCallback((layerId: string, coordinates: [number, number][], namePrefix: string) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : {
+      ...l, features: [...l.features, {
+        id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        coordinates,
+        attrs: { name: `${namePrefix} ${l.features.length + 1}`, description: "" },
+      }],
+    }));
+  }, []);
 
   const handleSetActiveDrawLayer = useCallback((id: string | null) => { setActiveDrawLayerId(id); setDrawingPoints([]); }, []);
   const handleToggleDrawLayer = useCallback((id: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, visible: !l.visible } : l)), []);
@@ -295,6 +319,7 @@ const Index = () => {
     setDrawingLayers((prev) => prev.filter((l) => l.id !== id));
     if (activeDrawLayerId === id) setActiveDrawLayerId(null);
     if (selectedFeature?.layerId === id) setSelectedFeature(null);
+    setSelectedFeatures((prev) => prev.filter((s) => s.layerId !== id));
   }, [activeDrawLayerId, selectedFeature]);
   const handleRenameDrawLayer = useCallback((id: string, name: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, name } : l)), []);
   const handleChangeDrawLayerColor = useCallback((id: string, color: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, color } : l)), []);
@@ -355,7 +380,7 @@ const Index = () => {
     setClickedPhotoAltitude(photoAtPoint?.altitude ?? null);
     setClickedTerrainHeight({ loading: true, value: null });
     setWmsPixelInfo(null);
-    handleMapClickForDrawing(lat, lng);
+    if (!selectMode) handleMapClickForDrawing(lat, lng);
 
     const requestId = ++terrainClickRequestRef.current;
     fetchTerrainHeight(lat, lng)
@@ -365,7 +390,7 @@ const Index = () => {
       .catch(() => {
         if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value: null });
       });
-  }, [handleMapClickForDrawing, photos]);
+  }, [handleMapClickForDrawing, photos, selectMode]);
 
   // ESC: finalize in-progress drawing and deactivate layer (exit drawing mode)
   useEffect(() => {
@@ -413,9 +438,9 @@ const Index = () => {
     setSelectedFeature(null);
   }, []);
 
-  const layerToGeoJson = useCallback((layer: DrawingLayer, epsg: CoordinateSystem = "wgs84", onlyFeatureId?: string): GeoJSON.FeatureCollection => {
+  const layerToGeoJson = useCallback((layer: DrawingLayer, epsg: CoordinateSystem = "wgs84", onlyFeatureIds?: string[]): GeoJSON.FeatureCollection => {
     const project = (lat: number, lng: number) => projectCoords(lat, lng, epsg);
-    const feats = onlyFeatureId ? layer.features.filter((f) => f.id === onlyFeatureId) : layer.features;
+    const feats = onlyFeatureIds ? layer.features.filter((f) => onlyFeatureIds.includes(f.id)) : layer.features;
     return {
       type: "FeatureCollection",
       features: feats.map((f) => {
@@ -434,14 +459,12 @@ const Index = () => {
     };
   }, []);
 
-  const handleExportDrawLayer = useCallback((id: string, format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem = "wgs84", onlyFeatureId?: string) => {
-    const layer = drawingLayers.find((l) => l.id === id);
-    if (!layer || layer.features.length === 0) { toast.warning("Warstwa jest pusta"); return; }
+  const exportSingleLayer = useCallback((layer: DrawingLayer, format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, onlyFeatureIds?: string[]) => {
     // KML musi być w WGS84 (specyfikacja OGC). Wymuś.
     const useEpsg: CoordinateSystem = format === "kml" ? "wgs84" : epsg;
-    const geojson = layerToGeoJson(layer, useEpsg, onlyFeatureId);
-    if (geojson.features.length === 0) { toast.warning("Brak obiektu do eksportu"); return; }
-    const suffix = onlyFeatureId ? "_obiekt" : "";
+    const geojson = layerToGeoJson(layer, useEpsg, onlyFeatureIds);
+    if (geojson.features.length === 0) { toast.warning(`${layer.name}: brak obiektów do eksportu`); return; }
+    const suffix = onlyFeatureIds ? "_zazn" : "";
     const name = layer.name.replace(/\s+/g, "_") + suffix;
     if (format === "kml") {
       const featuresKml = geojson.features.map((f) => {
@@ -459,8 +482,23 @@ const Index = () => {
     } else if (format === "dxf") exportDxf(geojson, name);
     else if (format === "geojson") exportGeoJson(geojson, name);
     else exportTxtFile(geojson, name);
-    if (useEpsg !== "wgs84") toast.success(`Eksport w ${useEpsg.toUpperCase()}`);
-  }, [drawingLayers, layerToGeoJson]);
+  }, [layerToGeoJson]);
+
+  const handleExportLayers = useCallback((layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => {
+    let exported = 0;
+    layerIds.forEach((id) => {
+      const layer = drawingLayers.find((l) => l.id === id);
+      if (!layer || layer.features.length === 0) return;
+      let onlyIds: string[] | undefined;
+      if (scope === "selected") {
+        onlyIds = selectedFeatures.filter((s) => s.layerId === id).map((s) => s.featureId);
+        if (onlyIds.length === 0) { toast.warning(`${layer.name}: brak zaznaczonych obiektów`); return; }
+      }
+      exportSingleLayer(layer, format, epsg, onlyIds);
+      exported++;
+    });
+    if (exported > 0) toast.success(`Wyeksportowano ${exported} warstw(y) (${epsg.toUpperCase()})`);
+  }, [drawingLayers, selectedFeatures, exportSingleLayer]);
 
   const selectedFeatureData = useMemo(() => {
     if (!selectedFeature) return null;
@@ -509,8 +547,6 @@ const Index = () => {
           selectedOverlapStats={selectedOverlapStats}
           measureMode={measureMode}
           measurement={measurement}
-          drawingLayers={drawingLayers}
-          activeDrawLayerId={activeDrawLayerId}
           onImportPhotos={startImport}
           onImportKml={handleImportKml}
           onImportVector={handleImportVector}
@@ -537,17 +573,6 @@ const Index = () => {
           onCheckCoverage={handleCheckCoverage}
           onClearCoverage={handleClearCoverage}
           coverageResults={coverageResults}
-          onAddDrawLayer={handleAddDrawLayer}
-          onSetActiveDrawLayer={handleSetActiveDrawLayer}
-          onToggleDrawLayer={handleToggleDrawLayer}
-          onRemoveDrawLayer={handleRemoveDrawLayer}
-          onRenameDrawLayer={handleRenameDrawLayer}
-          onChangeDrawLayerColor={handleChangeDrawLayerColor}
-          onExportDrawLayer={handleExportDrawLayer}
-          onSelectFeature={handleSelectFeature}
-          onFinishDrawing={finalizeDrawingNow}
-          drawingInProgressCount={drawingPoints.length}
-          selectedFeature={selectedFeature}
         />
       </div>
 
@@ -555,6 +580,26 @@ const Index = () => {
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute left-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden">
           {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
+
+        {/* Przełącznik panelu narzędzi (mobile) */}
+        <button onClick={() => setIsToolsOpen(!isToolsOpen)} className="absolute right-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden">
+          <PanelRight className="h-6 w-6" />
+        </button>
+
+        {/* Narzędzie zaznaczania (strzałka / fence) */}
+        <button
+          onClick={() => setSelectMode((v) => !v)}
+          title={selectMode ? "Tryb zaznaczania: WŁĄCZONY (klik = obiekt, przeciągnij = ogrodzenie)" : "Zaznaczanie obiektów (strzałka / ogrodzenie)"}
+          className={`absolute right-4 top-20 z-[1100] rounded-lg border p-2.5 shadow-lg transition-colors ${selectMode ? "bg-primary text-primary-foreground" : "bg-card text-foreground"}`}
+        >
+          <MousePointer2 className="h-5 w-5" />
+        </button>
+        {selectMode && selectedFeatures.length > 0 && (
+          <div className="absolute right-16 top-20 z-[1100] flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs shadow-lg">
+            <span className="font-medium text-foreground">{selectedFeatures.length} zazn.</span>
+            <button onClick={handleClearSelection} className="text-muted-foreground hover:text-foreground">✕</button>
+          </div>
+        )}
 
         {importProgress && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 w-72 rounded-lg border bg-card p-3 shadow-lg">
@@ -586,6 +631,11 @@ const Index = () => {
           selectedFeatureId={selectedFeature?.featureId ?? null}
           onFeatureClick={handleSelectFeature}
           onWmsPixelInfo={(layer, info) => setWmsPixelInfo({ layer, info })}
+          selectMode={selectMode}
+          selectedFeatureRefs={selectedFeatureRefs}
+          onToggleSelectFeature={handleToggleSelectFeature}
+          onFenceSelect={handleFenceSelect}
+          onClearSelection={handleClearSelection}
         />
 
         {showAglPrompt && (
@@ -703,6 +753,31 @@ const Index = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Prawy panel narzędzi (Rysowanie / GPS / Eksport) ── */}
+      {isToolsOpen && (
+        <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsToolsOpen(false)} />
+      )}
+      <div className={`fixed right-0 top-0 z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:z-auto md:shadow-none ${isToolsOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}`}>
+        <ToolsPanel
+          drawingLayers={drawingLayers}
+          activeDrawLayerId={activeDrawLayerId}
+          drawMode={drawMode}
+          drawingInProgressCount={drawingPoints.length}
+          selectedFeature={selectedFeature}
+          selectedFeatures={selectedFeatures}
+          onCreateLayer={handleCreateLayer}
+          onSetActiveDrawLayer={handleSetActiveDrawLayer}
+          onToggleDrawLayer={handleToggleDrawLayer}
+          onRemoveDrawLayer={handleRemoveDrawLayer}
+          onRenameDrawLayer={handleRenameDrawLayer}
+          onChangeDrawLayerColor={handleChangeDrawLayerColor}
+          onSelectFeature={handleSelectFeature}
+          onFinishDrawing={finalizeDrawingNow}
+          onAddFeatureToLayer={handleAddFeatureToLayer}
+          onExportLayers={handleExportLayers}
+        />
       </div>
     </div>
   );
