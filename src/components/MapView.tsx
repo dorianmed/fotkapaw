@@ -77,6 +77,11 @@ const MapView = ({
   selectedFeatureId = null,
   onFeatureClick,
   onWmsPixelInfo,
+  selectMode = false,
+  selectedFeatureRefs = [],
+  onToggleSelectFeature,
+  onFenceSelect,
+  onClearSelection,
 }: MapViewProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,6 +98,11 @@ const MapView = ({
   const wmsUrlRef = useRef(wmsUrl);
   const wmsLayerNameRef = useRef(wmsLayer);
   const onWmsPixelInfoRef = useRef(onWmsPixelInfo);
+  const selectModeRef = useRef(selectMode);
+  const onToggleSelectFeatureRef = useRef(onToggleSelectFeature);
+  const onFenceSelectRef = useRef(onFenceSelect);
+  const onClearSelectionRef = useRef(onClearSelection);
+  const drawingLayersRef = useRef(drawingLayers);
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
