@@ -390,7 +390,7 @@ const Index = () => {
       .catch(() => {
         if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value: null });
       });
-  }, [handleMapClickForDrawing, photos]);
+  }, [handleMapClickForDrawing, photos, selectMode]);
 
   // ESC: finalize in-progress drawing and deactivate layer (exit drawing mode)
   useEffect(() => {
