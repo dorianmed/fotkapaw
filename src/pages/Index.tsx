@@ -635,6 +635,11 @@ const Index = () => {
           selectedFeatureId={selectedFeature?.featureId ?? null}
           onFeatureClick={handleSelectFeature}
           onWmsPixelInfo={(layer, info) => setWmsPixelInfo({ layer, info })}
+          selectMode={selectMode}
+          selectedFeatureRefs={selectedFeatureRefs}
+          onToggleSelectFeature={handleToggleSelectFeature}
+          onFenceSelect={handleFenceSelect}
+          onClearSelection={handleClearSelection}
         />
 
         {showAglPrompt && (
