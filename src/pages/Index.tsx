@@ -60,6 +60,20 @@ const Index = () => {
   const [activeDrawLayerId, setActiveDrawLayerId] = useState<string | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const [selectedFeature, setSelectedFeature] = useState<{ layerId: string; featureId: string } | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedFeatures, setSelectedFeatures] = useState<{ layerId: string; featureId: string }[]>([]);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
+
+  const selectedFeatureRefs = useMemo(() => selectedFeatures.map((s) => `${s.layerId}:${s.featureId}`), [selectedFeatures]);
+  const handleToggleSelectFeature = useCallback((layerId: string, featureId: string) => {
+    setSelectedFeatures((prev) =>
+      prev.some((s) => s.layerId === layerId && s.featureId === featureId)
+        ? prev.filter((s) => !(s.layerId === layerId && s.featureId === featureId))
+        : [...prev, { layerId, featureId }]
+    );
+  }, []);
+  const handleFenceSelect = useCallback((refs: { layerId: string; featureId: string }[]) => setSelectedFeatures(refs), []);
+  const handleClearSelection = useCallback(() => setSelectedFeatures([]), []);
 
   const activeDrawLayer = useMemo(() => drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null, [drawingLayers, activeDrawLayerId]);
   const drawMode = activeDrawLayer?.type ?? "none";
