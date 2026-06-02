@@ -753,6 +753,31 @@ const Index = () => {
           </div>
         )}
       </div>
+
+      {/* ── Prawy panel narzędzi (Rysowanie / GPS / Eksport) ── */}
+      {isToolsOpen && (
+        <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsToolsOpen(false)} />
+      )}
+      <div className={`fixed right-0 top-0 z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:z-auto md:shadow-none ${isToolsOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}`}>
+        <ToolsPanel
+          drawingLayers={drawingLayers}
+          activeDrawLayerId={activeDrawLayerId}
+          drawMode={drawMode}
+          drawingInProgressCount={drawingPoints.length}
+          selectedFeature={selectedFeature}
+          selectedFeatures={selectedFeatures}
+          onCreateLayer={handleCreateLayer}
+          onSetActiveDrawLayer={handleSetActiveDrawLayer}
+          onToggleDrawLayer={handleToggleDrawLayer}
+          onRemoveDrawLayer={handleRemoveDrawLayer}
+          onRenameDrawLayer={handleRenameDrawLayer}
+          onChangeDrawLayerColor={handleChangeDrawLayerColor}
+          onSelectFeature={handleSelectFeature}
+          onFinishDrawing={finalizeDrawingNow}
+          onAddFeatureToLayer={handleAddFeatureToLayer}
+          onExportLayers={handleExportLayers}
+        />
+      </div>
     </div>
   );
 };
