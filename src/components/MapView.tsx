@@ -612,8 +612,8 @@ const MapView = ({
           const [lat, lng] = f.coordinates[0];
           const m = L.circleMarker([lat, lng], {
             radius: isSelected ? 8 : 6,
-            color: dl.color,
-            fillColor: dl.color,
+            color: drawColor,
+            fillColor: drawColor,
             fillOpacity: 0.85,
             weight,
           })
@@ -621,15 +621,15 @@ const MapView = ({
             .addTo(layer);
           m.on("click", handleClick);
         } else if (dl.type === "line" && f.coordinates.length >= 2) {
-          const m = L.polyline(f.coordinates, { color: dl.color, weight: weight + 1 })
+          const m = L.polyline(f.coordinates, { color: drawColor, weight: weight + 1 })
             .bindTooltip(tooltip, { direction: "top" })
             .addTo(layer);
           m.on("click", handleClick);
         } else if (dl.type === "polygon" && f.coordinates.length >= 3) {
           const m = L.polygon(f.coordinates, {
-            color: dl.color,
-            fillColor: dl.color,
-            fillOpacity: 0.2,
+            color: drawColor,
+            fillColor: drawColor,
+            fillOpacity: isMultiSelected ? 0.35 : 0.2,
             weight,
           })
             .bindTooltip(tooltip, { direction: "center" })
@@ -659,7 +659,7 @@ const MapView = ({
         L.polyline(drawingPoints, { color, weight: 2, dashArray: "6 4" }).addTo(layer);
       }
     }
-  }, [drawingLayers, drawingPoints, drawMode, selectedFeatureId, onFeatureClick]);
+  }, [drawingLayers, drawingPoints, drawMode, selectedFeatureId, onFeatureClick, selectedFeatureRefs]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 };
