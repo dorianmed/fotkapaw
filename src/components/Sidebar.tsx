@@ -57,17 +57,6 @@ interface SidebarProps {
   onCheckCoverage: (kmlId: string) => void;
   onClearCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
-  onAddDrawLayer: (type: "point" | "line" | "polygon") => void;
-  onSetActiveDrawLayer: (id: string | null) => void;
-  onToggleDrawLayer: (id: string) => void;
-  onRemoveDrawLayer: (id: string) => void;
-  onRenameDrawLayer: (id: string, name: string) => void;
-  onChangeDrawLayerColor: (id: string, color: string) => void;
-  onExportDrawLayer: (id: string, format: "kml" | "dxf" | "geojson" | "txt", epsg?: CoordinateSystem, onlyFeatureId?: string) => void;
-  onSelectFeature: (layerId: string, featureId: string) => void;
-  onFinishDrawing: () => void;
-  drawingInProgressCount: number;
-  selectedFeature: { layerId: string; featureId: string } | null;
 }
 
 const exportKml = (layer: KmlLayer) => {
