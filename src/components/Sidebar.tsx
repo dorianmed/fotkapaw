@@ -119,22 +119,12 @@ const Sidebar = ({
   wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
   onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
   overlapStats, selectedPhotoCount, selectedOverlapStats, measureMode, measurement,
-  drawingLayers, activeDrawLayerId,
   onImportPhotos, onImportKml, onImportVector,
   onToggleFootprints, onFootprintStyleChange, onToggleOverlap, onBaseLayerChange,
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
   onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
-  onAddDrawLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
-  onRenameDrawLayer, onChangeDrawLayerColor, onExportDrawLayer, onSelectFeature,
-  onFinishDrawing, drawingInProgressCount, selectedFeature,
 }: SidebarProps) => {
-  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
-  const [expandedFeatureLists, setExpandedFeatureLists] = useState<Record<string, boolean>>({});
-  const [exportEpsg, setExportEpsg] = useState<CoordinateSystem>("wgs84");
-  const activeLayer = drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null;
-  const drawMode = activeLayer?.type ?? "none";
-
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
     : undefined;
@@ -146,8 +136,6 @@ const Sidebar = ({
     : undefined;
   const exifSensorCount = photos.filter((p) => p.sensorInfo?.source !== "fallback").length;
 
-  const typeIcon = (t: string) => t === "point" ? <CircleDot className="h-3 w-3" /> : t === "line" ? <Minus className="h-3 w-3" /> : <Square className="h-3 w-3" />;
-  const typeLabel = (t: string) => t === "point" ? "Punktowa" : t === "line" ? "Liniowa" : "Powierzchniowa";
 
   return (
     <div className="h-full w-80 space-y-3 overflow-y-auto border-r bg-card p-4">
