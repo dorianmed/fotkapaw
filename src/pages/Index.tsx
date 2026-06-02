@@ -380,7 +380,7 @@ const Index = () => {
     setClickedPhotoAltitude(photoAtPoint?.altitude ?? null);
     setClickedTerrainHeight({ loading: true, value: null });
     setWmsPixelInfo(null);
-    handleMapClickForDrawing(lat, lng);
+    if (!selectMode) handleMapClickForDrawing(lat, lng);
 
     const requestId = ++terrainClickRequestRef.current;
     fetchTerrainHeight(lat, lng)
