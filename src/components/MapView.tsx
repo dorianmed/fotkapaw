@@ -589,15 +589,22 @@ const MapView = ({
     if (!layer) return;
     layer.clearLayers();
 
+    const selectedRefSet = new Set(selectedFeatureRefs);
     drawingLayers.forEach((dl) => {
       if (!dl.visible) return;
       dl.features.forEach((f) => {
-        const isSelected = selectedFeatureId === f.id;
+        const isMultiSelected = selectedRefSet.has(`${dl.id}:${f.id}`);
+        const isSelected = selectedFeatureId === f.id || isMultiSelected;
+        const drawColor = isMultiSelected ? "#f59e0b" : dl.color;
         const weight = isSelected ? 4 : 2;
         const tooltip = f.attrs.name || dl.name;
         const handleClick = (e: L.LeafletMouseEvent) => {
           if (measureModeRef.current !== "none") return;
           L.DomEvent.stop(e);
+          if (selectModeRef.current) {
+            onToggleSelectFeatureRef.current?.(dl.id, f.id);
+            return;
+          }
           onFeatureClick?.(dl.id, f.id);
         };
 
