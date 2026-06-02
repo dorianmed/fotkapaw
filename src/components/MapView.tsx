@@ -317,6 +317,11 @@ const MapView = ({
     wmsUrlRef.current = wmsUrl;
     wmsLayerNameRef.current = wmsLayer;
     onWmsPixelInfoRef.current = onWmsPixelInfo;
+    selectModeRef.current = selectMode;
+    onToggleSelectFeatureRef.current = onToggleSelectFeature;
+    onFenceSelectRef.current = onFenceSelect;
+    onClearSelectionRef.current = onClearSelection;
+    drawingLayersRef.current = drawingLayers;
     // Build snap targets: photo centers/corners + drawing layer vertices
     const photoTargets = createPhotoSnapTargets(photos);
     const drawTargets = drawingLayers.flatMap((dl) =>
