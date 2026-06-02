@@ -294,15 +294,24 @@ const Index = () => {
   }, []);
 
   // ---- Drawing layer handlers ----
-  const handleAddDrawLayer = useCallback((type: "point" | "line" | "polygon") => {
+  const handleCreateLayer = useCallback((opts: { name: string; type: "point" | "line" | "polygon"; crs: CoordinateSystem }): string => {
     const id = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const sameTypeCount = drawingLayers.filter((l) => l.type === type).length + 1;
-    const typeName = type === "point" ? "Punktowa" : type === "line" ? "Liniowa" : "Powierzchniowa";
-    const newLayer: DrawingLayer = { id, name: `${typeName} ${sameTypeCount}`, type, visible: true, color: LAYER_COLORS[type], features: [] };
+    const newLayer: DrawingLayer = { id, name: opts.name, type: opts.type, visible: true, color: LAYER_COLORS[opts.type], crs: opts.crs, features: [] };
     setDrawingLayers((prev) => [...prev, newLayer]);
     setActiveDrawLayerId(id);
     setDrawingPoints([]);
-  }, [drawingLayers]);
+    return id;
+  }, []);
+
+  const handleAddFeatureToLayer = useCallback((layerId: string, coordinates: [number, number][], namePrefix: string) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : {
+      ...l, features: [...l.features, {
+        id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        coordinates,
+        attrs: { name: `${namePrefix} ${l.features.length + 1}`, description: "" },
+      }],
+    }));
+  }, []);
 
   const handleSetActiveDrawLayer = useCallback((id: string | null) => { setActiveDrawLayerId(id); setDrawingPoints([]); }, []);
   const handleToggleDrawLayer = useCallback((id: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, visible: !l.visible } : l)), []);
