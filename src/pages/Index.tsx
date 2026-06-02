@@ -546,8 +546,6 @@ const Index = () => {
           selectedOverlapStats={selectedOverlapStats}
           measureMode={measureMode}
           measurement={measurement}
-          drawingLayers={drawingLayers}
-          activeDrawLayerId={activeDrawLayerId}
           onImportPhotos={startImport}
           onImportKml={handleImportKml}
           onImportVector={handleImportVector}
