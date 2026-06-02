@@ -319,6 +319,7 @@ const Index = () => {
     setDrawingLayers((prev) => prev.filter((l) => l.id !== id));
     if (activeDrawLayerId === id) setActiveDrawLayerId(null);
     if (selectedFeature?.layerId === id) setSelectedFeature(null);
+    setSelectedFeatures((prev) => prev.filter((s) => s.layerId !== id));
   }, [activeDrawLayerId, selectedFeature]);
   const handleRenameDrawLayer = useCallback((id: string, name: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, name } : l)), []);
   const handleChangeDrawLayerColor = useCallback((id: string, color: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, color } : l)), []);
