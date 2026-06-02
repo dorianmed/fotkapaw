@@ -227,6 +227,8 @@ const MapView = ({
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
+      // W trybie zaznaczania klik obsługuje logika fence (mousedown/up).
+      if (selectModeRef.current) return;
       onMapClickRef.current?.(event.latlng.lat, event.latlng.lng);
       if (measureModeRef.current !== "none") {
         addMeasurementPoint(event.latlng.lat, event.latlng.lng);
@@ -243,14 +245,65 @@ const MapView = ({
       L.DomEvent.stop(event);
     };
 
+    // ── Zaznaczanie ogrodzeniem (fence) ──
+    let fenceStart: L.LatLng | null = null;
+    let fenceRect: L.Rectangle | null = null;
+    let fenceMoved = false;
+
+    const handleMouseDown = (event: L.LeafletMouseEvent) => {
+      if (!selectModeRef.current) return;
+      fenceStart = event.latlng;
+      fenceMoved = false;
+      map.dragging.disable();
+    };
+
+    const handleMouseMove = (event: L.LeafletMouseEvent) => {
+      if (!fenceStart) return;
+      fenceMoved = true;
+      const bounds = L.latLngBounds(fenceStart, event.latlng);
+      if (fenceRect) fenceRect.setBounds(bounds);
+      else fenceRect = L.rectangle(bounds, { color: "#3b82f6", weight: 1, dashArray: "4 4", fillOpacity: 0.1 }).addTo(map);
+    };
+
+    const handleMouseUp = () => {
+      if (!selectModeRef.current) return;
+      map.dragging.enable();
+      if (fenceStart) {
+        if (fenceMoved && fenceRect) {
+          const bounds = fenceRect.getBounds();
+          const refs: { layerId: string; featureId: string }[] = [];
+          for (const dl of drawingLayersRef.current) {
+            if (!dl.visible) continue;
+            for (const f of dl.features) {
+              if (f.coordinates.some(([lat, lng]) => bounds.contains([lat, lng]))) {
+                refs.push({ layerId: dl.id, featureId: f.id });
+              }
+            }
+          }
+          onFenceSelectRef.current?.(refs);
+        } else {
+          onClearSelectionRef.current?.();
+        }
+      }
+      fenceStart = null;
+      if (fenceRect) { map.removeLayer(fenceRect); fenceRect = null; }
+      fenceMoved = false;
+    };
+
     window.addEventListener("zoom-to-bounds", handleZoom);
     map.on("click", handleMapClick);
     map.on("dblclick", handleMapDblClick);
+    map.on("mousedown", handleMouseDown);
+    map.on("mousemove", handleMouseMove);
+    map.on("mouseup", handleMouseUp);
 
     return () => {
       window.removeEventListener("zoom-to-bounds", handleZoom);
       map.off("click", handleMapClick);
       map.off("dblclick", handleMapDblClick);
+      map.off("mousedown", handleMouseDown);
+      map.off("mousemove", handleMouseMove);
+      map.off("mouseup", handleMouseUp);
       map.remove();
       mapRef.current = null;
     };
