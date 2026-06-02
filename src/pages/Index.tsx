@@ -437,9 +437,9 @@ const Index = () => {
     setSelectedFeature(null);
   }, []);
 
-  const layerToGeoJson = useCallback((layer: DrawingLayer, epsg: CoordinateSystem = "wgs84", onlyFeatureId?: string): GeoJSON.FeatureCollection => {
+  const layerToGeoJson = useCallback((layer: DrawingLayer, epsg: CoordinateSystem = "wgs84", onlyFeatureIds?: string[]): GeoJSON.FeatureCollection => {
     const project = (lat: number, lng: number) => projectCoords(lat, lng, epsg);
-    const feats = onlyFeatureId ? layer.features.filter((f) => f.id === onlyFeatureId) : layer.features;
+    const feats = onlyFeatureIds ? layer.features.filter((f) => onlyFeatureIds.includes(f.id)) : layer.features;
     return {
       type: "FeatureCollection",
       features: feats.map((f) => {
@@ -458,14 +458,12 @@ const Index = () => {
     };
   }, []);
 
-  const handleExportDrawLayer = useCallback((id: string, format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem = "wgs84", onlyFeatureId?: string) => {
-    const layer = drawingLayers.find((l) => l.id === id);
-    if (!layer || layer.features.length === 0) { toast.warning("Warstwa jest pusta"); return; }
+  const exportSingleLayer = useCallback((layer: DrawingLayer, format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, onlyFeatureIds?: string[]) => {
     // KML musi być w WGS84 (specyfikacja OGC). Wymuś.
     const useEpsg: CoordinateSystem = format === "kml" ? "wgs84" : epsg;
-    const geojson = layerToGeoJson(layer, useEpsg, onlyFeatureId);
-    if (geojson.features.length === 0) { toast.warning("Brak obiektu do eksportu"); return; }
-    const suffix = onlyFeatureId ? "_obiekt" : "";
+    const geojson = layerToGeoJson(layer, useEpsg, onlyFeatureIds);
+    if (geojson.features.length === 0) { toast.warning(`${layer.name}: brak obiektów do eksportu`); return; }
+    const suffix = onlyFeatureIds ? "_zazn" : "";
     const name = layer.name.replace(/\s+/g, "_") + suffix;
     if (format === "kml") {
       const featuresKml = geojson.features.map((f) => {
@@ -483,8 +481,23 @@ const Index = () => {
     } else if (format === "dxf") exportDxf(geojson, name);
     else if (format === "geojson") exportGeoJson(geojson, name);
     else exportTxtFile(geojson, name);
-    if (useEpsg !== "wgs84") toast.success(`Eksport w ${useEpsg.toUpperCase()}`);
-  }, [drawingLayers, layerToGeoJson]);
+  }, [layerToGeoJson]);
+
+  const handleExportLayers = useCallback((layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => {
+    let exported = 0;
+    layerIds.forEach((id) => {
+      const layer = drawingLayers.find((l) => l.id === id);
+      if (!layer || layer.features.length === 0) return;
+      let onlyIds: string[] | undefined;
+      if (scope === "selected") {
+        onlyIds = selectedFeatures.filter((s) => s.layerId === id).map((s) => s.featureId);
+        if (onlyIds.length === 0) { toast.warning(`${layer.name}: brak zaznaczonych obiektów`); return; }
+      }
+      exportSingleLayer(layer, format, epsg, onlyIds);
+      exported++;
+    });
+    if (exported > 0) toast.success(`Wyeksportowano ${exported} warstw(y) (${epsg.toUpperCase()})`);
+  }, [drawingLayers, selectedFeatures, exportSingleLayer]);
 
   const selectedFeatureData = useMemo(() => {
     if (!selectedFeature) return null;
