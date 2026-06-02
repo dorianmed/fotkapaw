@@ -605,6 +605,26 @@ const Index = () => {
           {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
 
+        {/* Przełącznik panelu narzędzi (mobile) */}
+        <button onClick={() => setIsToolsOpen(!isToolsOpen)} className="absolute right-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden">
+          <PanelRight className="h-6 w-6" />
+        </button>
+
+        {/* Narzędzie zaznaczania (strzałka / fence) */}
+        <button
+          onClick={() => setSelectMode((v) => !v)}
+          title={selectMode ? "Tryb zaznaczania: WŁĄCZONY (klik = obiekt, przeciągnij = ogrodzenie)" : "Zaznaczanie obiektów (strzałka / ogrodzenie)"}
+          className={`absolute right-4 top-20 z-[1100] rounded-lg border p-2.5 shadow-lg transition-colors ${selectMode ? "bg-primary text-primary-foreground" : "bg-card text-foreground"}`}
+        >
+          <MousePointer2 className="h-5 w-5" />
+        </button>
+        {selectMode && selectedFeatures.length > 0 && (
+          <div className="absolute right-16 top-20 z-[1100] flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs shadow-lg">
+            <span className="font-medium text-foreground">{selectedFeatures.length} zazn.</span>
+            <button onClick={handleClearSelection} className="text-muted-foreground hover:text-foreground">✕</button>
+          </div>
+        )}
+
         {importProgress && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 w-72 rounded-lg border bg-card p-3 shadow-lg">
             <p className="text-xs text-muted-foreground mb-2">Przetwarzanie zdjęć: {importProgress.current}/{importProgress.total}</p>
