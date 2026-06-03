@@ -724,6 +724,17 @@ const Index = () => {
           </div>
         )}
 
+        {txtImport && (
+          <TxtImportDialog
+            name={txtImport.name}
+            text={txtImport.text}
+            onConfirm={handleConfirmTxtImport}
+            onCancel={() => setTxtImport(null)}
+          />
+        )}
+
+
+
         {/* Coordinates panel */}
         {clickedCoords && (() => {
           const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
