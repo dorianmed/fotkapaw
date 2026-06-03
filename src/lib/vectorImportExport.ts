@@ -259,17 +259,47 @@ export function exportGeoJson(geojson: GeoJSON.FeatureCollection, name: string):
 
 // ─── TXT Export ───────────────────────────────────────────────
 
-export function exportTxt(geojson: GeoJSON.FeatureCollection, name: string): void {
-  const lines: string[] = ["nr\tx\ty\th\tcode"];
-  let idx = 1;
+/**
+ * Eksport TXT obsługujący punkty, linie i powierzchnie.
+ * Współrzędne wejściowe są już w docelowym układzie ([E, N] lub [lng, lat]).
+ * Zapisuje kolumny: obj  nr  X  Y  H  kod  (X=północna, Y=wschodnia).
+ * Gdy podany `system` inny niż wgs84 – dokłada plik .prj (WKT).
+ */
+export function exportTxt(
+  geojson: GeoJSON.FeatureCollection,
+  name: string,
+  opts?: { precision?: number; system?: CoordinateSystem; lngForPrj?: number }
+): void {
+  const p = opts?.precision ?? 7;
+  const lines: string[] = ["obj\tnr\tX\tY\tH\tkod"];
+  let objIdx = 0;
+
+  const writePt = (coord: number[], code: string, ptIdx: number) => {
+    const Y = coord[0]; // wschodnia / lng
+    const X = coord[1]; // północna / lat
+    const H = coord[2];
+    lines.push(`${objIdx}\t${ptIdx}\t${X.toFixed(p)}\t${Y.toFixed(p)}\t${(H ?? 0).toFixed(p === 7 ? 3 : 2)}\t${code}`);
+  };
+
   for (const f of geojson.features) {
-    if (f.geometry.type === "Point") {
-      const [x, y, h] = f.geometry.coordinates;
-      lines.push(`${idx}\t${x.toFixed(7)}\t${y.toFixed(7)}\t${(h ?? 0).toFixed(3)}\t${f.properties?.code ?? ""}`);
-      idx++;
+    objIdx++;
+    const code = String(f.properties?.code ?? f.properties?.name ?? "");
+    const geom = f.geometry;
+    if (geom.type === "Point") {
+      writePt(geom.coordinates as number[], code, 1);
+    } else if (geom.type === "LineString") {
+      (geom.coordinates as number[][]).forEach((c, i) => writePt(c, code, i + 1));
+    } else if (geom.type === "Polygon") {
+      (geom.coordinates[0] as number[][]).forEach((c, i) => writePt(c, code, i + 1));
     }
   }
+
   downloadBlob(new Blob([lines.join("\n")], { type: "text/plain" }), `${name}.txt`);
+
+  if (opts?.system && opts.system !== "wgs84") {
+    const prj = prjWkt(opts.system, opts.lngForPrj);
+    downloadBlob(new Blob([prj], { type: "text/plain" }), `${name}.prj`);
+  }
 }
 
 function downloadBlob(blob: Blob, filename: string) {
