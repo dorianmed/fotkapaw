@@ -825,7 +825,7 @@ const Index = () => {
       {isToolsOpen && (
         <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsToolsOpen(false)} />
       )}
-      <div className={`fixed right-0 top-0 z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:z-auto md:shadow-none ${isToolsOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}`}>
+      <div className={`fixed inset-x-0 bottom-0 z-[1200] rounded-t-2xl bg-background shadow-2xl transition-transform duration-300 md:relative md:inset-auto md:right-0 md:top-0 md:h-full md:w-72 md:translate-y-0 md:rounded-none md:shadow-none md:z-auto ${isToolsOpen ? "translate-y-0" : "translate-y-full md:translate-y-0"}`}>
         <ToolsPanel
           drawingLayers={drawingLayers}
           activeDrawLayerId={activeDrawLayerId}
