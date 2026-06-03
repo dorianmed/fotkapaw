@@ -8,6 +8,8 @@ export interface DrawnFeatureAttrs {
 export interface DrawnFeature {
   id: string;
   coordinates: [number, number][];
+  /** Wysokości (m n.p.m.) odpowiadające kolejnym wierzchołkom – np. z GPS. */
+  heights?: (number | null)[];
   attrs: DrawnFeatureAttrs;
 }
 
