@@ -4,6 +4,7 @@
  */
 import DxfParser from "dxf-parser";
 import shp from "shpjs";
+import { CoordinateSystem, unprojectCoords, exportPrecision, prjWkt } from "@/lib/coordinateUtils";
 
 // ─── DXF Import ───────────────────────────────────────────────
 
