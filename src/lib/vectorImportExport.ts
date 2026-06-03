@@ -86,6 +86,68 @@ export async function importShp(file: File): Promise<GeoJSON.FeatureCollection> 
 
 // ─── TXT/CSV Import ──────────────────────────────────────────
 
+export type TxtDelimiter = "auto" | "space" | "tab" | "semicolon" | "comma";
+
+export interface TxtImportOptions {
+  crs: CoordinateSystem;
+  delimiter: TxtDelimiter;
+  /** Numer pierwszej linii z danymi (1-based) – pomija nagłówki. */
+  startLine: number;
+  /** Numery kolumn (1-based). X = współrzędna północna (geodezyjna X / szerokość). */
+  colX: number;
+  colY: number;
+  colH?: number;
+  colName?: number;
+  colCode?: number;
+}
+
+function splitByDelimiter(line: string, delimiter: TxtDelimiter): string[] {
+  switch (delimiter) {
+    case "tab": return line.split("\t").map((s) => s.trim());
+    case "semicolon": return line.split(";").map((s) => s.trim());
+    case "comma": return line.split(",").map((s) => s.trim());
+    case "space": return line.split(/\s+/).map((s) => s.trim()).filter(Boolean);
+    default: {
+      const parts = line.split(/[\t;]+|\s{2,}/).map((s) => s.trim()).filter(Boolean);
+      return parts.length >= 2 ? parts : line.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+    }
+  }
+}
+
+const num = (s: string | undefined): number | null => {
+  if (s === undefined) return null;
+  const v = parseFloat(String(s).replace(",", "."));
+  return Number.isFinite(v) ? v : null;
+};
+
+/** Import TXT/CSV z pełną kontrolą: układ, separator, kolumny, linia startowa. */
+export function importTxtAdvanced(text: string, opts: TxtImportOptions): GeoJSON.FeatureCollection {
+  const rawLines = text.split(/\r?\n/);
+  const features: GeoJSON.Feature[] = [];
+
+  for (let i = (opts.startLine - 1); i < rawLines.length; i++) {
+    const line = rawLines[i]?.trim();
+    if (!line || line.startsWith("#") || line.startsWith("//")) continue;
+    const fields = splitByDelimiter(line, opts.delimiter);
+    const X = num(fields[opts.colX - 1]); // północna
+    const Y = num(fields[opts.colY - 1]); // wschodnia
+    if (X === null || Y === null) continue;
+    const h = opts.colH ? num(fields[opts.colH - 1]) : null;
+    const name = opts.colName ? (fields[opts.colName - 1] ?? "") : "";
+    const code = opts.colCode ? (fields[opts.colCode - 1] ?? "") : "";
+
+    const [lat, lng] = unprojectCoords(X, Y, opts.crs);
+
+    features.push({
+      type: "Feature",
+      properties: { name: name || `Punkt ${features.length + 1}`, code, altitude: h },
+      geometry: { type: "Point", coordinates: h !== null ? [lng, lat, h] : [lng, lat] },
+    });
+  }
+
+  return { type: "FeatureCollection", features };
+}
+
 export function importTxt(text: string): GeoJSON.FeatureCollection {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#") && !l.startsWith("//"));
   const features: GeoJSON.Feature[] = [];
