@@ -145,19 +145,37 @@ const ToolsPanel = ({
     [drawingLayers, exportSel]
   );
 
+  // Warstwy zawierające zaznaczone obiekty (narzędzie strzałki/fence).
+  const layersFromSelectedFeatures = useMemo(
+    () => Array.from(new Set(selectedFeatures.map((s) => s.layerId))),
+    [selectedFeatures]
+  );
+
   const doExport = (format: "kml" | "dxf" | "geojson" | "txt") => {
-    if (selectedExportIds.length === 0) { toast.warning("Zaznacz warstwy do eksportu"); return; }
-    onExportLayers(selectedExportIds, format, exportEpsg, exportScope);
+    // W trybie "Zaznaczone": jeśli nie zaznaczono warstw checkboxami,
+    // użyj warstw wynikających z zaznaczonych obiektów.
+    let ids = selectedExportIds;
+    if (exportScope === "selected") {
+      if (selectedFeatures.length === 0) { toast.warning("Najpierw zaznacz obiekty narzędziem strzałki/ogrodzenia"); return; }
+      if (ids.length === 0) ids = layersFromSelectedFeatures;
+      else ids = ids.filter((id) => layersFromSelectedFeatures.includes(id));
+      if (ids.length === 0) { toast.warning("Zaznaczone obiekty nie należą do wybranych warstw"); return; }
+    } else if (ids.length === 0) {
+      toast.warning("Zaznacz warstwy do eksportu");
+      return;
+    }
+    onExportLayers(ids, format, exportEpsg, exportScope);
   };
 
   return (
-    <div className="h-full w-80 overflow-y-auto border-l bg-card p-3">
+    <div className="h-full w-72 overflow-y-auto border-l bg-card p-2">
       <Tabs defaultValue="draw" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="draw" className="text-xs"><PenTool className="mr-1 h-3 w-3" /> Rysowanie</TabsTrigger>
           <TabsTrigger value="gps" className="text-xs"><Satellite className="mr-1 h-3 w-3" /> GPS</TabsTrigger>
           <TabsTrigger value="export" className="text-xs"><Download className="mr-1 h-3 w-3" /> Eksport</TabsTrigger>
         </TabsList>
+
 
         {/* ───────── Rysowanie ───────── */}
         <TabsContent value="draw" className="space-y-3 pt-3">
