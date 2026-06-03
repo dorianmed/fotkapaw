@@ -239,6 +239,15 @@ const Sidebar = ({
             <span><FileText className="mr-2 h-4 w-4" /> Importuj DXF / SHP / TXT</span>
           </Button>
         </label>
+        {kmlLayers.length > 0 && (
+          <div className="flex items-center gap-2 rounded border p-2">
+            <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ eksportu TXT:</Label>
+            <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
+              value={vecExportCrs} onChange={(e) => setVecExportCrs(e.target.value as CoordinateSystem)}>
+              {EXPORT_EPSG.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
         {kmlLayers.map((layer) => (
           <div key={layer.id} className="space-y-1 rounded-md border p-2">
             <div className="flex items-center justify-between gap-1 text-sm">
