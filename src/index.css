@@ -103,3 +103,9 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Przesuń kontrolki zoomu (góra-prawo) poniżej przycisków: menu narzędzi + strzałka zaznaczania,
+   żeby +/- nie nakładało się na te znaczki. */
+.leaflet-top.leaflet-right {
+  top: 130px;
+}
