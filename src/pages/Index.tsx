@@ -129,99 +129,126 @@ const Index = () => {
     const total = files.length;
     setImportProgress({ current: 0, total });
 
-    // 1) parse EXIF for all photos
-    type Parsed = { file: File; exif: any };
-    const parsed: Parsed[] = [];
-    let noGps = 0;
-    for (let i = 0; i < total; i++) {
-      const file = files[i];
-      try {
-        const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
-        if (!exif?.latitude || !exif?.longitude) { noGps++; }
-        else parsed.push({ file, exif });
-      } catch { noGps++; }
-      setImportProgress({ current: i + 1, total });
-    }
+    try {
+      // 1) parse EXIF równolegle w paczkach (znacznie szybciej dla tysięcy zdjęć)
+      type Parsed = { file: File; exif: any };
+      const parsed: Parsed[] = [];
+      let noGps = 0;
+      let done = 0;
+      const CONCURRENCY = 32;
+      const fileArr = Array.from(files);
+      for (let i = 0; i < fileArr.length; i += CONCURRENCY) {
+        const batch = fileArr.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          batch.map(async (file) => {
+            try {
+              const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
+              if (exif && typeof exif.latitude === "number" && typeof exif.longitude === "number") {
+                return { file, exif } as Parsed;
+              }
+            } catch { /* brak/uszkodzony EXIF */ }
+            return null;
+          })
+        );
+        for (const r of results) {
+          if (r) parsed.push(r);
+          else noGps++;
+        }
+        done += batch.length;
+        setImportProgress({ current: done, total });
+      }
 
-    // 2) optionally fetch DEM heights and compute per-photo AGL
-    let terrainHeights: (number | null)[] | null = null;
-    if (opts.useDem && parsed.length > 0) {
-      const haveAlt = parsed.filter((p) => typeof p.exif.GPSAltitude === "number").length;
-      if (haveAlt === 0) {
-        toast.warning("Brak GPSAltitude w EXIF — używam ręcznego AGL");
-      } else {
-        toast.info(`Pobieram wysokości terenu (Copernicus DEM) dla ${parsed.length} punktów…`);
+      if (parsed.length === 0) {
+        toast.error(`Żadne z ${total} zdjęć nie ma współrzędnych GPS — nie zaimportowano.`);
+        return;
+      }
+
+      // 2) opcjonalnie pobierz wysokości DEM i policz AGL per zdjęcie
+      let terrainHeights: (number | null)[] | null = null;
+      if (opts.useDem) {
+        const haveAlt = parsed.filter((p) => typeof p.exif.GPSAltitude === "number").length;
+        if (haveAlt === 0) {
+          toast.warning("Brak GPSAltitude w EXIF — używam ręcznego AGL");
+        } else {
+          toast.info(`Pobieram wysokości terenu (Copernicus DEM) dla ${parsed.length} punktów…`);
+          try {
+            terrainHeights = await fetchTerrainHeights(
+              parsed.map((p) => ({ lat: p.exif.latitude, lng: p.exif.longitude })),
+              (d, tot) => setImportProgress({ current: d, total: tot }),
+            );
+          } catch {
+            toast.error("Nie udało się pobrać DEM — używam ręcznego AGL");
+            terrainHeights = null;
+          }
+        }
+      }
+
+      // 3) zbuduj zdjęcia (każde w try/catch, by jedno błędne nie zatrzymało importu)
+      const newPhotos: PhotoPoint[] = [];
+      let aglSum = 0, aglN = 0;
+      for (let i = 0; i < parsed.length; i++) {
         try {
-          terrainHeights = await fetchTerrainHeights(
-            parsed.map((p) => ({ lat: p.exif.latitude, lng: p.exif.longitude })),
-            (done, tot) => setImportProgress({ current: done, total: tot }),
-          );
-        } catch {
-          toast.error("Nie udało się pobrać DEM — używam ręcznego AGL");
-          terrainHeights = null;
-        }
+          const { file, exif } = parsed[i];
+          let altitudeAGL = opts.manualAgl;
+          if (terrainHeights) {
+            const droneMsl = exif.GPSAltitude;
+            const terr = terrainHeights[i];
+            if (typeof droneMsl === "number" && typeof terr === "number") {
+              const computed = droneMsl - terr;
+              if (computed > 1) altitudeAGL = computed;
+            }
+          }
+          aglSum += altitudeAGL; aglN++;
+
+          const terrainHeight = terrainHeights?.[i] ?? null;
+          const estimated = estimateSensorDimensions(exif, file.name);
+          const currentSensor: SensorConfig = {
+            resolutionX: estimated.resX, resolutionY: estimated.resY,
+            sensorWidth: estimated.width, sensorHeight: estimated.height,
+            focalLength: estimated.focal, flightAltitude: altitudeAGL,
+          };
+          const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
+          const longSide = Math.max(groundWidth, groundHeight);
+          const shortSide = Math.min(groundWidth, groundHeight);
+
+          newPhotos.push({
+            id: `${file.name}-${Date.now()}-${Math.random()}`,
+            filename: file.name, lat: exif.latitude, lng: exif.longitude,
+            altitude: exif.GPSAltitude,
+            altitudeAGL,
+            terrainHeight,
+            timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
+            footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
+            gsd: calcGSD(currentSensor, altitudeAGL),
+            sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
+            thumbnailUrl: URL.createObjectURL(file),
+          });
+        } catch { /* pomiń pojedyncze błędne zdjęcie */ }
       }
-    }
 
-    // 3) build photos
-    const newPhotos: PhotoPoint[] = [];
-    let aglSum = 0, aglN = 0;
-    for (let i = 0; i < parsed.length; i++) {
-      const { file, exif } = parsed[i];
-      let altitudeAGL = opts.manualAgl;
-      if (terrainHeights) {
-        const droneMsl = exif.GPSAltitude;
-        const terr = terrainHeights[i];
-        if (typeof droneMsl === "number" && typeof terr === "number") {
-          const computed = droneMsl - terr;
-          if (computed > 1) altitudeAGL = computed;
-        }
+      if (newPhotos.length > 0) {
+        setPhotos((prev) => {
+          const allPhotos = [...prev, ...newPhotos];
+          const withHeadings = assignHeadings(allPhotos);
+          return withHeadings.map((photo) => ({
+            ...photo,
+            footprintCorners: calcFootprintCorners(photo.lat, photo.lng, photo.footprintWidth, photo.footprintHeight, photo.heading ?? 0),
+          }));
+        });
+        const avgAgl = aglN ? (aglSum / aglN) : 0;
+        toast.success(
+          terrainHeights
+            ? `Zaimportowano ${newPhotos.length} zdjęć. Średni AGL z DEM: ${avgAgl.toFixed(1)} m`
+            : `Zaimportowano ${newPhotos.length} zdjęć (AGL ${opts.manualAgl} m)`
+        );
+        // automatyczne dopasowanie widoku do nowych zdjęć
+        const bounds = L.latLngBounds(newPhotos.map((p) => [p.lat, p.lng] as [number, number]));
+        if (bounds.isValid()) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
       }
-      aglSum += altitudeAGL; aglN++;
-
-      const terrainHeight = terrainHeights?.[i] ?? null;
-      const estimated = estimateSensorDimensions(exif, file.name);
-      const currentSensor: SensorConfig = {
-        resolutionX: estimated.resX, resolutionY: estimated.resY,
-        sensorWidth: estimated.width, sensorHeight: estimated.height,
-        focalLength: estimated.focal, flightAltitude: altitudeAGL,
-      };
-      const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
-      const longSide = Math.max(groundWidth, groundHeight);
-      const shortSide = Math.min(groundWidth, groundHeight);
-
-      newPhotos.push({
-        id: `${file.name}-${Date.now()}-${Math.random()}`,
-        filename: file.name, lat: exif.latitude, lng: exif.longitude,
-        altitude: exif.GPSAltitude,
-        altitudeAGL,
-        terrainHeight,
-        timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
-        footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
-        gsd: calcGSD(currentSensor, altitudeAGL),
-        sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
-        thumbnailUrl: URL.createObjectURL(file),
-      });
+      if (noGps > 0) toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
+    } finally {
+      setImportProgress(null);
     }
-
-    if (newPhotos.length > 0) {
-      setPhotos((prev) => {
-        const allPhotos = [...prev, ...newPhotos];
-        const withHeadings = assignHeadings(allPhotos);
-        return withHeadings.map((photo) => ({
-          ...photo,
-          footprintCorners: calcFootprintCorners(photo.lat, photo.lng, photo.footprintWidth, photo.footprintHeight, photo.heading ?? 0),
-        }));
-      });
-      const avgAgl = aglN ? (aglSum / aglN) : 0;
-      toast.success(
-        terrainHeights
-          ? `Zaimportowano ${newPhotos.length} zdjęć. Średni AGL z DEM: ${avgAgl.toFixed(1)} m`
-          : `Zaimportowano ${newPhotos.length} zdjęć (AGL ${opts.manualAgl} m)`
-      );
-    }
-    if (noGps > 0) toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
-    setImportProgress(null);
   }, []);
 
   const handleAglConfirm = useCallback(() => {
