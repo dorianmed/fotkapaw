@@ -156,6 +156,7 @@ const Sidebar = ({
     ? photos.filter((p) => p.gsd !== undefined).reduce((s, p) => s + (p.gsd ?? 0), 0) / photos.filter((p) => p.gsd !== undefined).length
     : undefined;
   const exifSensorCount = photos.filter((p) => p.sensorInfo?.source !== "fallback").length;
+  const [vecExportCrs, setVecExportCrs] = useState<CoordinateSystem>("puwg1992");
 
 
   return (
