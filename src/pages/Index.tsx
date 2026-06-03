@@ -309,16 +309,32 @@ const Index = () => {
   const handleImportVector = useCallback(async (file: File) => {
     try {
       const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext === "txt" || ext === "csv") {
+        // Otwórz okno z opcjami importu TXT (układ, separator, kolumny, linia startowa)
+        const text = await file.text();
+        setTxtImport({ name: file.name.replace(/\.[^/.]+$/, ""), text });
+        return;
+      }
       let geojson: GeoJSON.FeatureCollection;
       if (ext === "dxf") geojson = await importDxf(file);
       else if (ext === "shp" || ext === "zip") geojson = await importShp(file);
-      else if (ext === "txt" || ext === "csv") geojson = importTxt(await file.text());
       else { toast.error(`Nieobsługiwany format: .${ext}`); return; }
       if (geojson.features.length === 0) { toast.warning("Brak obiektów w pliku"); return; }
       setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, geojson }]);
       toast.success(`Zaimportowano ${geojson.features.length} obiektów`);
     } catch (err) { toast.error(`Błąd importu: ${(err as Error).message}`); }
   }, []);
+
+  const handleConfirmTxtImport = useCallback((opts: TxtImportOptions) => {
+    if (!txtImport) return;
+    try {
+      const geojson = importTxtAdvanced(txtImport.text, opts);
+      if (geojson.features.length === 0) { toast.warning("Brak punktów — sprawdź separator / kolumny / linię startową"); return; }
+      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: txtImport.name, visible: true, color: "#6366f1", weight: 2, geojson }]);
+      toast.success(`Zaimportowano ${geojson.features.length} punktów (${opts.crs.toUpperCase()})`);
+      setTxtImport(null);
+    } catch (err) { toast.error(`Błąd importu TXT: ${(err as Error).message}`); }
+  }, [txtImport]);
 
   // ---- Drawing layer handlers ----
   const handleCreateLayer = useCallback((opts: { name: string; type: "point" | "line" | "polygon"; crs: CoordinateSystem }): string => {
