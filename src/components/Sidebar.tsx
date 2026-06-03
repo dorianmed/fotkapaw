@@ -264,6 +264,7 @@ const Sidebar = ({
                 <Button variant="ghost" size="sm" onClick={() => exportKml(layer)} title="KML"><Download className="h-3 w-3" /></Button>
                 <Button variant="ghost" size="sm" onClick={() => exportDxf(layer.geojson, layer.name)} title="DXF"><span className="text-[9px]">DXF</span></Button>
                 <Button variant="ghost" size="sm" onClick={() => exportGeoJson(layer.geojson, layer.name)} title="GeoJSON"><span className="text-[9px]">GJ</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportLayerTxt(layer, vecExportCrs)} title={`TXT (${vecExportCrs.toUpperCase()})`}><span className="text-[9px]">TXT</span></Button>
                 <Button variant="ghost" size="sm" onClick={() => onRemoveKmlLayer(layer.id)}><Trash2 className="h-3 w-3" /></Button>
               </div>
             </div>
