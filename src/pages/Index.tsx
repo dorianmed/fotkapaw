@@ -6,6 +6,7 @@ import { Camera, Menu, X, MousePointer2, PanelRight } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import ToolsPanel from "@/components/ToolsPanel";
+import TxtImportDialog from "@/components/TxtImportDialog";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
 import { analyzeOverlap, assignHeadings, calcDistance, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
