@@ -74,11 +74,17 @@ const ToolsPanel = ({
   const [gpsType, setGpsType] = useState<GeomType>("point");
   const [gpsCrs, setGpsCrs] = useState<CoordinateSystem>("puwg1992");
   const [gpsVertices, setGpsVertices] = useState<[number, number][]>([]);
+  const [gpsHeights, setGpsHeights] = useState<(number | null)[]>([]);
   const [gpsBusy, setGpsBusy] = useState(false);
-  const [gpsLast, setGpsLast] = useState<{ lat: number; lng: number; acc: number } | null>(null);
+  const [gpsLast, setGpsLast] = useState<{ lat: number; lng: number; acc: number; alt: number | null } | null>(null);
+  // Etykieta punktu: numer kolejny lub własna nazwa
+  const [gpsLabelMode, setGpsLabelMode] = useState<"number" | "name">("number");
+  const [gpsLabel, setGpsLabel] = useState("");
 
   const targetLayer = gpsTarget !== "new" ? drawingLayers.find((l) => l.id === gpsTarget) ?? null : null;
   const effType: GeomType = targetLayer ? targetLayer.type : gpsType;
+
+  const pointNamePrefix = () => gpsLabelMode === "name" ? (gpsLabel.trim() || "Punkt") : "Pkt";
 
   const ensureGpsLayer = (): string => {
     if (targetLayer) return targetLayer.id;
@@ -88,13 +94,14 @@ const ToolsPanel = ({
     return id;
   };
 
-  const readGps = async (): Promise<[number, number] | null> => {
+  const readGps = async (): Promise<{ coord: [number, number]; alt: number | null } | null> => {
     setGpsBusy(true);
     try {
       const pos = await getPosition();
       const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
-      setGpsLast({ lat, lng, acc });
-      return [lat, lng];
+      const alt = typeof pos.coords.altitude === "number" ? pos.coords.altitude : null;
+      setGpsLast({ lat, lng, acc, alt });
+      return { coord: [lat, lng], alt };
     } catch (e) {
       toast.error(`Błąd GPS: ${(e as Error).message}`);
       return null;
@@ -104,25 +111,27 @@ const ToolsPanel = ({
   };
 
   const measurePoint = async () => {
-    const coord = await readGps();
-    if (!coord) return;
+    const r = await readGps();
+    if (!r) return;
     const id = ensureGpsLayer();
-    onAddFeatureToLayer(id, [coord], "Punkt GPS");
+    onAddFeatureToLayer(id, [r.coord], pointNamePrefix(), [r.alt]);
     toast.success("Dodano punkt z GPS");
   };
 
   const addVertex = async () => {
-    const coord = await readGps();
-    if (!coord) return;
-    setGpsVertices((prev) => [...prev, coord]);
+    const r = await readGps();
+    if (!r) return;
+    setGpsVertices((prev) => [...prev, r.coord]);
+    setGpsHeights((prev) => [...prev, r.alt]);
   };
 
   const finishGpsFeature = () => {
     const min = effType === "line" ? 2 : 3;
     if (gpsVertices.length < min) { toast.warning(`Potrzeba min. ${min} punktów`); return; }
     const id = ensureGpsLayer();
-    onAddFeatureToLayer(id, gpsVertices, effType === "line" ? "Linia GPS" : "Poligon GPS");
+    onAddFeatureToLayer(id, gpsVertices, effType === "line" ? "Linia GPS" : "Poligon GPS", gpsHeights);
     setGpsVertices([]);
+    setGpsHeights([]);
     toast.success("Dodano obiekt z GPS");
   };
 
