@@ -349,11 +349,12 @@ const Index = () => {
     return id;
   }, []);
 
-  const handleAddFeatureToLayer = useCallback((layerId: string, coordinates: [number, number][], namePrefix: string) => {
+  const handleAddFeatureToLayer = useCallback((layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => {
     setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : {
       ...l, features: [...l.features, {
         id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         coordinates,
+        heights,
         attrs: { name: `${namePrefix} ${l.features.length + 1}`, description: "" },
       }],
     }));
