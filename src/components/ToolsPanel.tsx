@@ -168,7 +168,9 @@ const ToolsPanel = ({
   };
 
   return (
-    <div className="h-full w-72 overflow-y-auto border-l bg-card p-2">
+    <div className="max-h-[65vh] w-full overflow-y-auto border-l bg-card p-2 md:h-full md:max-h-none md:w-72">
+      {/* Uchwyt szuflady (tylko mobile) */}
+      <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-muted md:hidden" />
       <Tabs defaultValue="draw" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="draw" className="text-xs"><PenTool className="mr-1 h-3 w-3" /> Rysowanie</TabsTrigger>
