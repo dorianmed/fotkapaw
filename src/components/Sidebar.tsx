@@ -13,8 +13,29 @@ import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
 import { DrawingLayer } from "@/types/drawing";
 import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
-import { CoordinateSystem, EXPORT_EPSG } from "@/lib/coordinateUtils";
+import { CoordinateSystem, EXPORT_EPSG, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { useState, ReactNode } from "react";
+
+// Rzutuje GeoJSON (WGS84 [lng,lat]) na wybrany układ i eksportuje do TXT (+ .prj).
+const exportLayerTxt = (layer: KmlLayer, crs: CoordinateSystem) => {
+  const conv = (c: number[]): number[] => {
+    const [E, N] = projectCoords(c[1], c[0], crs); // wejście [lng,lat]
+    return c.length > 2 ? [E, N, c[2]] : [E, N];
+  };
+  const features = layer.geojson.features.map((f) => {
+    const g = f.geometry as any;
+    let geometry = g;
+    if (g.type === "Point") geometry = { type: "Point", coordinates: conv(g.coordinates) };
+    else if (g.type === "LineString") geometry = { type: "LineString", coordinates: g.coordinates.map(conv) };
+    else if (g.type === "Polygon") geometry = { type: "Polygon", coordinates: g.coordinates.map((r: number[][]) => r.map(conv)) };
+    return { ...f, geometry };
+  });
+  const lng0 = (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0]?.[0]
+    ?? (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0];
+  exportTxt({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection, layer.name, {
+    precision: exportPrecision(crs), system: crs, lngForPrj: typeof lng0 === "number" ? lng0 : undefined,
+  });
+};
 
 interface SidebarProps {
   photos: PhotoPoint[];
