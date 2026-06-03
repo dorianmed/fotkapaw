@@ -35,7 +35,7 @@ interface ToolsPanelProps {
   onChangeDrawLayerColor: (id: string, color: string) => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
   onFinishDrawing: () => void;
-  onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string) => void;
+  onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => void;
   onExportLayers: (layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => void;
 }
 
