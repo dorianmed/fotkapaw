@@ -35,7 +35,7 @@ interface ToolsPanelProps {
   onChangeDrawLayerColor: (id: string, color: string) => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
   onFinishDrawing: () => void;
-  onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string) => void;
+  onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => void;
   onExportLayers: (layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => void;
 }
 
@@ -74,11 +74,17 @@ const ToolsPanel = ({
   const [gpsType, setGpsType] = useState<GeomType>("point");
   const [gpsCrs, setGpsCrs] = useState<CoordinateSystem>("puwg1992");
   const [gpsVertices, setGpsVertices] = useState<[number, number][]>([]);
+  const [gpsHeights, setGpsHeights] = useState<(number | null)[]>([]);
   const [gpsBusy, setGpsBusy] = useState(false);
-  const [gpsLast, setGpsLast] = useState<{ lat: number; lng: number; acc: number } | null>(null);
+  const [gpsLast, setGpsLast] = useState<{ lat: number; lng: number; acc: number; alt: number | null } | null>(null);
+  // Etykieta punktu: numer kolejny lub własna nazwa
+  const [gpsLabelMode, setGpsLabelMode] = useState<"number" | "name">("number");
+  const [gpsLabel, setGpsLabel] = useState("");
 
   const targetLayer = gpsTarget !== "new" ? drawingLayers.find((l) => l.id === gpsTarget) ?? null : null;
   const effType: GeomType = targetLayer ? targetLayer.type : gpsType;
+
+  const pointNamePrefix = () => gpsLabelMode === "name" ? (gpsLabel.trim() || "Punkt") : "Pkt";
 
   const ensureGpsLayer = (): string => {
     if (targetLayer) return targetLayer.id;
@@ -88,13 +94,14 @@ const ToolsPanel = ({
     return id;
   };
 
-  const readGps = async (): Promise<[number, number] | null> => {
+  const readGps = async (): Promise<{ coord: [number, number]; alt: number | null } | null> => {
     setGpsBusy(true);
     try {
       const pos = await getPosition();
       const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
-      setGpsLast({ lat, lng, acc });
-      return [lat, lng];
+      const alt = typeof pos.coords.altitude === "number" ? pos.coords.altitude : null;
+      setGpsLast({ lat, lng, acc, alt });
+      return { coord: [lat, lng], alt };
     } catch (e) {
       toast.error(`Błąd GPS: ${(e as Error).message}`);
       return null;
@@ -104,25 +111,27 @@ const ToolsPanel = ({
   };
 
   const measurePoint = async () => {
-    const coord = await readGps();
-    if (!coord) return;
+    const r = await readGps();
+    if (!r) return;
     const id = ensureGpsLayer();
-    onAddFeatureToLayer(id, [coord], "Punkt GPS");
+    onAddFeatureToLayer(id, [r.coord], pointNamePrefix(), [r.alt]);
     toast.success("Dodano punkt z GPS");
   };
 
   const addVertex = async () => {
-    const coord = await readGps();
-    if (!coord) return;
-    setGpsVertices((prev) => [...prev, coord]);
+    const r = await readGps();
+    if (!r) return;
+    setGpsVertices((prev) => [...prev, r.coord]);
+    setGpsHeights((prev) => [...prev, r.alt]);
   };
 
   const finishGpsFeature = () => {
     const min = effType === "line" ? 2 : 3;
     if (gpsVertices.length < min) { toast.warning(`Potrzeba min. ${min} punktów`); return; }
     const id = ensureGpsLayer();
-    onAddFeatureToLayer(id, gpsVertices, effType === "line" ? "Linia GPS" : "Poligon GPS");
+    onAddFeatureToLayer(id, gpsVertices, effType === "line" ? "Linia GPS" : "Poligon GPS", gpsHeights);
     setGpsVertices([]);
+    setGpsHeights([]);
     toast.success("Dodano obiekt z GPS");
   };
 
@@ -136,19 +145,39 @@ const ToolsPanel = ({
     [drawingLayers, exportSel]
   );
 
+  // Warstwy zawierające zaznaczone obiekty (narzędzie strzałki/fence).
+  const layersFromSelectedFeatures = useMemo(
+    () => Array.from(new Set(selectedFeatures.map((s) => s.layerId))),
+    [selectedFeatures]
+  );
+
   const doExport = (format: "kml" | "dxf" | "geojson" | "txt") => {
-    if (selectedExportIds.length === 0) { toast.warning("Zaznacz warstwy do eksportu"); return; }
-    onExportLayers(selectedExportIds, format, exportEpsg, exportScope);
+    // W trybie "Zaznaczone": jeśli nie zaznaczono warstw checkboxami,
+    // użyj warstw wynikających z zaznaczonych obiektów.
+    let ids = selectedExportIds;
+    if (exportScope === "selected") {
+      if (selectedFeatures.length === 0) { toast.warning("Najpierw zaznacz obiekty narzędziem strzałki/ogrodzenia"); return; }
+      if (ids.length === 0) ids = layersFromSelectedFeatures;
+      else ids = ids.filter((id) => layersFromSelectedFeatures.includes(id));
+      if (ids.length === 0) { toast.warning("Zaznaczone obiekty nie należą do wybranych warstw"); return; }
+    } else if (ids.length === 0) {
+      toast.warning("Zaznacz warstwy do eksportu");
+      return;
+    }
+    onExportLayers(ids, format, exportEpsg, exportScope);
   };
 
   return (
-    <div className="h-full w-80 overflow-y-auto border-l bg-card p-3">
+    <div className="max-h-[65vh] w-full overflow-y-auto border-l bg-card p-2 md:h-full md:max-h-none md:w-72">
+      {/* Uchwyt szuflady (tylko mobile) */}
+      <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-muted md:hidden" />
       <Tabs defaultValue="draw" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="draw" className="text-xs"><PenTool className="mr-1 h-3 w-3" /> Rysowanie</TabsTrigger>
           <TabsTrigger value="gps" className="text-xs"><Satellite className="mr-1 h-3 w-3" /> GPS</TabsTrigger>
           <TabsTrigger value="export" className="text-xs"><Download className="mr-1 h-3 w-3" /> Eksport</TabsTrigger>
         </TabsList>
+
 
         {/* ───────── Rysowanie ───────── */}
         <TabsContent value="draw" className="space-y-3 pt-3">
@@ -232,13 +261,13 @@ const ToolsPanel = ({
         </TabsContent>
 
         {/* ───────── Pomiar GPS ───────── */}
-        <TabsContent value="gps" className="space-y-3 pt-3">
+        <TabsContent value="gps" className="space-y-2 pt-2">
           <div className="space-y-2 rounded-md border p-2">
             <Label className="text-xs font-semibold flex items-center gap-1"><Satellite className="h-3 w-3" /> Pomiar GPS urządzenia</Label>
             <div className="flex items-center gap-2">
               <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Warstwa:</Label>
               <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
-                value={gpsTarget} onChange={(e) => { setGpsTarget(e.target.value); setGpsVertices([]); }}>
+                value={gpsTarget} onChange={(e) => { setGpsTarget(e.target.value); setGpsVertices([]); setGpsHeights([]); }}>
                 <option value="new">+ Nowa warstwa</option>
                 {drawingLayers.map((l) => <option key={l.id} value={l.id}>{l.name} ({typeLabel(l.type)})</option>)}
               </select>
@@ -249,21 +278,38 @@ const ToolsPanel = ({
                 <Input className="h-8 text-xs" placeholder="Nazwa nowej warstwy" value={gpsName} onChange={(e) => setGpsName(e.target.value)} />
                 <div className="grid grid-cols-3 gap-1">
                   {(["point", "line", "polygon"] as GeomType[]).map((t) => (
-                    <Button key={t} variant={gpsType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => { setGpsType(t); setGpsVertices([]); }}>
+                    <Button key={t} variant={gpsType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => { setGpsType(t); setGpsVertices([]); setGpsHeights([]); }}>
                       {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
                     </Button>
                   ))}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
-                  <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
-                    value={gpsCrs} onChange={(e) => setGpsCrs(e.target.value as CoordinateSystem)}>
-                    {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
               </>
             ) : (
-              <p className="text-[10px] text-muted-foreground">Typ z warstwy: <b>{typeLabel(effType)}</b></p>
+              <p className="text-[10px] text-muted-foreground">Typ z warstwy: <b>{typeLabel(effType)}</b> · {(targetLayer?.crs ?? "wgs84").toUpperCase()}</p>
+            )}
+
+            {/* Układ współrzędnych – zawsze dostępny (PL: 1992 / 2000) */}
+            {gpsTarget === "new" && (
+              <div className="flex items-center gap-2">
+                <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
+                <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
+                  value={gpsCrs} onChange={(e) => setGpsCrs(e.target.value as CoordinateSystem)}>
+                  {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Etykieta punktu: numer kolejny lub własna nazwa */}
+            {effType === "point" && (
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-1">
+                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("number")}>Numer</Button>
+                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
+                </div>
+                {gpsLabelMode === "name" && (
+                  <Input className="h-7 text-xs" placeholder="Nazwa punktu (np. słup)" value={gpsLabel} onChange={(e) => setGpsLabel(e.target.value)} />
+                )}
+              </div>
             )}
 
             {effType === "point" ? (
@@ -279,7 +325,7 @@ const ToolsPanel = ({
                   <Check className="mr-1 h-3 w-3" /> Zakończ obiekt
                 </Button>
                 {gpsVertices.length > 0 && (
-                  <Button size="sm" variant="ghost" className="w-full text-[10px]" onClick={() => setGpsVertices([])}>Wyczyść punkty</Button>
+                  <Button size="sm" variant="ghost" className="w-full text-[10px]" onClick={() => { setGpsVertices([]); setGpsHeights([]); }}>Wyczyść punkty</Button>
                 )}
               </div>
             )}
@@ -288,12 +334,13 @@ const ToolsPanel = ({
               <div className="rounded border bg-background p-2 text-[10px] font-mono text-muted-foreground">
                 <div>φ {gpsLast.lat.toFixed(7)}</div>
                 <div>λ {gpsLast.lng.toFixed(7)}</div>
-                <div>± {gpsLast.acc.toFixed(1)} m</div>
+                <div>± {gpsLast.acc.toFixed(1)} m{gpsLast.alt !== null ? ` · H ${gpsLast.alt.toFixed(1)} m` : ""}</div>
               </div>
             )}
           </div>
           <p className="text-[10px] text-muted-foreground">Pozwól przeglądarce na dostęp do lokalizacji. Najlepiej na telefonie z GPS.</p>
         </TabsContent>
+
 
         {/* ───────── Eksport ───────── */}
         <TabsContent value="export" className="space-y-3 pt-3">

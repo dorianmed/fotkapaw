@@ -217,6 +217,7 @@ const MapView = ({
 
     const map = L.map(containerRef.current, { zoomControl: false, doubleClickZoom: false }).setView([52.0, 19.0], 6);
     L.control.zoom({ position: "topright" }).addTo(map);
+    L.control.scale({ position: "bottomright", metric: true, imperial: false, maxWidth: 160 }).addTo(map);
     mapRef.current = map;
     measurementLayerRef.current = L.layerGroup().addTo(map);
     drawingLayerRef.current = L.layerGroup().addTo(map);

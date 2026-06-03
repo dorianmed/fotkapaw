@@ -13,8 +13,29 @@ import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
 import { DrawingLayer } from "@/types/drawing";
 import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
-import { CoordinateSystem, EXPORT_EPSG } from "@/lib/coordinateUtils";
+import { CoordinateSystem, EXPORT_EPSG, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { useState, ReactNode } from "react";
+
+// Rzutuje GeoJSON (WGS84 [lng,lat]) na wybrany układ i eksportuje do TXT (+ .prj).
+const exportLayerTxt = (layer: KmlLayer, crs: CoordinateSystem) => {
+  const conv = (c: number[]): number[] => {
+    const [E, N] = projectCoords(c[1], c[0], crs); // wejście [lng,lat]
+    return c.length > 2 ? [E, N, c[2]] : [E, N];
+  };
+  const features = layer.geojson.features.map((f) => {
+    const g = f.geometry as any;
+    let geometry = g;
+    if (g.type === "Point") geometry = { type: "Point", coordinates: conv(g.coordinates) };
+    else if (g.type === "LineString") geometry = { type: "LineString", coordinates: g.coordinates.map(conv) };
+    else if (g.type === "Polygon") geometry = { type: "Polygon", coordinates: g.coordinates.map((r: number[][]) => r.map(conv)) };
+    return { ...f, geometry };
+  });
+  const lng0 = (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0]?.[0]
+    ?? (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0];
+  exportTxt({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection, layer.name, {
+    precision: exportPrecision(crs), system: crs, lngForPrj: typeof lng0 === "number" ? lng0 : undefined,
+  });
+};
 
 interface SidebarProps {
   photos: PhotoPoint[];
@@ -135,6 +156,7 @@ const Sidebar = ({
     ? photos.filter((p) => p.gsd !== undefined).reduce((s, p) => s + (p.gsd ?? 0), 0) / photos.filter((p) => p.gsd !== undefined).length
     : undefined;
   const exifSensorCount = photos.filter((p) => p.sensorInfo?.source !== "fallback").length;
+  const [vecExportCrs, setVecExportCrs] = useState<CoordinateSystem>("puwg1992");
 
 
   return (
@@ -217,6 +239,15 @@ const Sidebar = ({
             <span><FileText className="mr-2 h-4 w-4" /> Importuj DXF / SHP / TXT</span>
           </Button>
         </label>
+        {kmlLayers.length > 0 && (
+          <div className="flex items-center gap-2 rounded border p-2">
+            <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ eksportu TXT:</Label>
+            <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
+              value={vecExportCrs} onChange={(e) => setVecExportCrs(e.target.value as CoordinateSystem)}>
+              {EXPORT_EPSG.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
         {kmlLayers.map((layer) => (
           <div key={layer.id} className="space-y-1 rounded-md border p-2">
             <div className="flex items-center justify-between gap-1 text-sm">
@@ -233,6 +264,7 @@ const Sidebar = ({
                 <Button variant="ghost" size="sm" onClick={() => exportKml(layer)} title="KML"><Download className="h-3 w-3" /></Button>
                 <Button variant="ghost" size="sm" onClick={() => exportDxf(layer.geojson, layer.name)} title="DXF"><span className="text-[9px]">DXF</span></Button>
                 <Button variant="ghost" size="sm" onClick={() => exportGeoJson(layer.geojson, layer.name)} title="GeoJSON"><span className="text-[9px]">GJ</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportLayerTxt(layer, vecExportCrs)} title={`TXT (${vecExportCrs.toUpperCase()})`}><span className="text-[9px]">TXT</span></Button>
                 <Button variant="ghost" size="sm" onClick={() => onRemoveKmlLayer(layer.id)}><Trash2 className="h-3 w-3" /></Button>
               </div>
             </div>

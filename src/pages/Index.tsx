@@ -6,6 +6,7 @@ import { Camera, Menu, X, MousePointer2, PanelRight } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import ToolsPanel from "@/components/ToolsPanel";
+import TxtImportDialog from "@/components/TxtImportDialog";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
 import { analyzeOverlap, assignHeadings, calcDistance, calcFootprint, calcFootprintCorners, calcGSD, estimateSensorDimensions } from "@/lib/photoUtils";
 import { toast } from "sonner";
@@ -13,11 +14,11 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords } from "@/lib/coordinateUtils";
+import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
-import { importDxf, importShp, importTxt, exportDxf, exportGeoJson, exportTxt as exportTxtFile } from "@/lib/vectorImportExport";
+import { importDxf, importShp, importTxtAdvanced, exportDxf, exportGeoJson, exportTxt as exportTxtFile, TxtImportOptions } from "@/lib/vectorImportExport";
 import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -63,6 +64,9 @@ const Index = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedFeatures, setSelectedFeatures] = useState<{ layerId: string; featureId: string }[]>([]);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [txtImport, setTxtImport] = useState<{ name: string; text: string } | null>(null);
+
+
 
   const selectedFeatureRefs = useMemo(() => selectedFeatures.map((s) => `${s.layerId}:${s.featureId}`), [selectedFeatures]);
   const handleToggleSelectFeature = useCallback((layerId: string, featureId: string) => {
@@ -129,99 +133,126 @@ const Index = () => {
     const total = files.length;
     setImportProgress({ current: 0, total });
 
-    // 1) parse EXIF for all photos
-    type Parsed = { file: File; exif: any };
-    const parsed: Parsed[] = [];
-    let noGps = 0;
-    for (let i = 0; i < total; i++) {
-      const file = files[i];
-      try {
-        const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
-        if (!exif?.latitude || !exif?.longitude) { noGps++; }
-        else parsed.push({ file, exif });
-      } catch { noGps++; }
-      setImportProgress({ current: i + 1, total });
-    }
+    try {
+      // 1) parse EXIF równolegle w paczkach (znacznie szybciej dla tysięcy zdjęć)
+      type Parsed = { file: File; exif: any };
+      const parsed: Parsed[] = [];
+      let noGps = 0;
+      let done = 0;
+      const CONCURRENCY = 32;
+      const fileArr = Array.from(files);
+      for (let i = 0; i < fileArr.length; i += CONCURRENCY) {
+        const batch = fileArr.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          batch.map(async (file) => {
+            try {
+              const exif = await exifr.parse(file, { gps: true, tiff: true, exif: true });
+              if (exif && typeof exif.latitude === "number" && typeof exif.longitude === "number") {
+                return { file, exif } as Parsed;
+              }
+            } catch { /* brak/uszkodzony EXIF */ }
+            return null;
+          })
+        );
+        for (const r of results) {
+          if (r) parsed.push(r);
+          else noGps++;
+        }
+        done += batch.length;
+        setImportProgress({ current: done, total });
+      }
 
-    // 2) optionally fetch DEM heights and compute per-photo AGL
-    let terrainHeights: (number | null)[] | null = null;
-    if (opts.useDem && parsed.length > 0) {
-      const haveAlt = parsed.filter((p) => typeof p.exif.GPSAltitude === "number").length;
-      if (haveAlt === 0) {
-        toast.warning("Brak GPSAltitude w EXIF — używam ręcznego AGL");
-      } else {
-        toast.info(`Pobieram wysokości terenu (Copernicus DEM) dla ${parsed.length} punktów…`);
+      if (parsed.length === 0) {
+        toast.error(`Żadne z ${total} zdjęć nie ma współrzędnych GPS — nie zaimportowano.`);
+        return;
+      }
+
+      // 2) opcjonalnie pobierz wysokości DEM i policz AGL per zdjęcie
+      let terrainHeights: (number | null)[] | null = null;
+      if (opts.useDem) {
+        const haveAlt = parsed.filter((p) => typeof p.exif.GPSAltitude === "number").length;
+        if (haveAlt === 0) {
+          toast.warning("Brak GPSAltitude w EXIF — używam ręcznego AGL");
+        } else {
+          toast.info(`Pobieram wysokości terenu (Copernicus DEM) dla ${parsed.length} punktów…`);
+          try {
+            terrainHeights = await fetchTerrainHeights(
+              parsed.map((p) => ({ lat: p.exif.latitude, lng: p.exif.longitude })),
+              (d, tot) => setImportProgress({ current: d, total: tot }),
+            );
+          } catch {
+            toast.error("Nie udało się pobrać DEM — używam ręcznego AGL");
+            terrainHeights = null;
+          }
+        }
+      }
+
+      // 3) zbuduj zdjęcia (każde w try/catch, by jedno błędne nie zatrzymało importu)
+      const newPhotos: PhotoPoint[] = [];
+      let aglSum = 0, aglN = 0;
+      for (let i = 0; i < parsed.length; i++) {
         try {
-          terrainHeights = await fetchTerrainHeights(
-            parsed.map((p) => ({ lat: p.exif.latitude, lng: p.exif.longitude })),
-            (done, tot) => setImportProgress({ current: done, total: tot }),
-          );
-        } catch {
-          toast.error("Nie udało się pobrać DEM — używam ręcznego AGL");
-          terrainHeights = null;
-        }
+          const { file, exif } = parsed[i];
+          let altitudeAGL = opts.manualAgl;
+          if (terrainHeights) {
+            const droneMsl = exif.GPSAltitude;
+            const terr = terrainHeights[i];
+            if (typeof droneMsl === "number" && typeof terr === "number") {
+              const computed = droneMsl - terr;
+              if (computed > 1) altitudeAGL = computed;
+            }
+          }
+          aglSum += altitudeAGL; aglN++;
+
+          const terrainHeight = terrainHeights?.[i] ?? null;
+          const estimated = estimateSensorDimensions(exif, file.name);
+          const currentSensor: SensorConfig = {
+            resolutionX: estimated.resX, resolutionY: estimated.resY,
+            sensorWidth: estimated.width, sensorHeight: estimated.height,
+            focalLength: estimated.focal, flightAltitude: altitudeAGL,
+          };
+          const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
+          const longSide = Math.max(groundWidth, groundHeight);
+          const shortSide = Math.min(groundWidth, groundHeight);
+
+          newPhotos.push({
+            id: `${file.name}-${Date.now()}-${Math.random()}`,
+            filename: file.name, lat: exif.latitude, lng: exif.longitude,
+            altitude: exif.GPSAltitude,
+            altitudeAGL,
+            terrainHeight,
+            timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
+            footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
+            gsd: calcGSD(currentSensor, altitudeAGL),
+            sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
+            thumbnailUrl: URL.createObjectURL(file),
+          });
+        } catch { /* pomiń pojedyncze błędne zdjęcie */ }
       }
-    }
 
-    // 3) build photos
-    const newPhotos: PhotoPoint[] = [];
-    let aglSum = 0, aglN = 0;
-    for (let i = 0; i < parsed.length; i++) {
-      const { file, exif } = parsed[i];
-      let altitudeAGL = opts.manualAgl;
-      if (terrainHeights) {
-        const droneMsl = exif.GPSAltitude;
-        const terr = terrainHeights[i];
-        if (typeof droneMsl === "number" && typeof terr === "number") {
-          const computed = droneMsl - terr;
-          if (computed > 1) altitudeAGL = computed;
-        }
+      if (newPhotos.length > 0) {
+        setPhotos((prev) => {
+          const allPhotos = [...prev, ...newPhotos];
+          const withHeadings = assignHeadings(allPhotos);
+          return withHeadings.map((photo) => ({
+            ...photo,
+            footprintCorners: calcFootprintCorners(photo.lat, photo.lng, photo.footprintWidth, photo.footprintHeight, photo.heading ?? 0),
+          }));
+        });
+        const avgAgl = aglN ? (aglSum / aglN) : 0;
+        toast.success(
+          terrainHeights
+            ? `Zaimportowano ${newPhotos.length} zdjęć. Średni AGL z DEM: ${avgAgl.toFixed(1)} m`
+            : `Zaimportowano ${newPhotos.length} zdjęć (AGL ${opts.manualAgl} m)`
+        );
+        // automatyczne dopasowanie widoku do nowych zdjęć
+        const bounds = L.latLngBounds(newPhotos.map((p) => [p.lat, p.lng] as [number, number]));
+        if (bounds.isValid()) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
       }
-      aglSum += altitudeAGL; aglN++;
-
-      const terrainHeight = terrainHeights?.[i] ?? null;
-      const estimated = estimateSensorDimensions(exif, file.name);
-      const currentSensor: SensorConfig = {
-        resolutionX: estimated.resX, resolutionY: estimated.resY,
-        sensorWidth: estimated.width, sensorHeight: estimated.height,
-        focalLength: estimated.focal, flightAltitude: altitudeAGL,
-      };
-      const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
-      const longSide = Math.max(groundWidth, groundHeight);
-      const shortSide = Math.min(groundWidth, groundHeight);
-
-      newPhotos.push({
-        id: `${file.name}-${Date.now()}-${Math.random()}`,
-        filename: file.name, lat: exif.latitude, lng: exif.longitude,
-        altitude: exif.GPSAltitude,
-        altitudeAGL,
-        terrainHeight,
-        timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
-        footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
-        gsd: calcGSD(currentSensor, altitudeAGL),
-        sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
-        thumbnailUrl: URL.createObjectURL(file),
-      });
+      if (noGps > 0) toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
+    } finally {
+      setImportProgress(null);
     }
-
-    if (newPhotos.length > 0) {
-      setPhotos((prev) => {
-        const allPhotos = [...prev, ...newPhotos];
-        const withHeadings = assignHeadings(allPhotos);
-        return withHeadings.map((photo) => ({
-          ...photo,
-          footprintCorners: calcFootprintCorners(photo.lat, photo.lng, photo.footprintWidth, photo.footprintHeight, photo.heading ?? 0),
-        }));
-      });
-      const avgAgl = aglN ? (aglSum / aglN) : 0;
-      toast.success(
-        terrainHeights
-          ? `Zaimportowano ${newPhotos.length} zdjęć. Średni AGL z DEM: ${avgAgl.toFixed(1)} m`
-          : `Zaimportowano ${newPhotos.length} zdjęć (AGL ${opts.manualAgl} m)`
-      );
-    }
-    if (noGps > 0) toast.warning(`${noGps} zdjęć bez danych GPS — pominięto`);
-    setImportProgress(null);
   }, []);
 
   const handleAglConfirm = useCallback(() => {
@@ -282,16 +313,32 @@ const Index = () => {
   const handleImportVector = useCallback(async (file: File) => {
     try {
       const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext === "txt" || ext === "csv") {
+        // Otwórz okno z opcjami importu TXT (układ, separator, kolumny, linia startowa)
+        const text = await file.text();
+        setTxtImport({ name: file.name.replace(/\.[^/.]+$/, ""), text });
+        return;
+      }
       let geojson: GeoJSON.FeatureCollection;
       if (ext === "dxf") geojson = await importDxf(file);
       else if (ext === "shp" || ext === "zip") geojson = await importShp(file);
-      else if (ext === "txt" || ext === "csv") geojson = importTxt(await file.text());
       else { toast.error(`Nieobsługiwany format: .${ext}`); return; }
       if (geojson.features.length === 0) { toast.warning("Brak obiektów w pliku"); return; }
       setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, geojson }]);
       toast.success(`Zaimportowano ${geojson.features.length} obiektów`);
     } catch (err) { toast.error(`Błąd importu: ${(err as Error).message}`); }
   }, []);
+
+  const handleConfirmTxtImport = useCallback((opts: TxtImportOptions) => {
+    if (!txtImport) return;
+    try {
+      const geojson = importTxtAdvanced(txtImport.text, opts);
+      if (geojson.features.length === 0) { toast.warning("Brak punktów — sprawdź separator / kolumny / linię startową"); return; }
+      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: txtImport.name, visible: true, color: "#6366f1", weight: 2, geojson }]);
+      toast.success(`Zaimportowano ${geojson.features.length} punktów (${opts.crs.toUpperCase()})`);
+      setTxtImport(null);
+    } catch (err) { toast.error(`Błąd importu TXT: ${(err as Error).message}`); }
+  }, [txtImport]);
 
   // ---- Drawing layer handlers ----
   const handleCreateLayer = useCallback((opts: { name: string; type: "point" | "line" | "polygon"; crs: CoordinateSystem }): string => {
@@ -303,11 +350,12 @@ const Index = () => {
     return id;
   }, []);
 
-  const handleAddFeatureToLayer = useCallback((layerId: string, coordinates: [number, number][], namePrefix: string) => {
+  const handleAddFeatureToLayer = useCallback((layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => {
     setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : {
       ...l, features: [...l.features, {
         id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         coordinates,
+        heights,
         attrs: { name: `${namePrefix} ${l.features.length + 1}`, description: "" },
       }],
     }));
@@ -445,14 +493,17 @@ const Index = () => {
       type: "FeatureCollection",
       features: feats.map((f) => {
         const props = { name: f.attrs.name, description: f.attrs.description };
+        const withH = (xy: [number, number], i: number): number[] => {
+          const h = f.heights?.[i];
+          return typeof h === "number" ? [xy[0], xy[1], h] : [xy[0], xy[1]];
+        };
         if (layer.type === "point") {
-          const [x, y] = project(f.coordinates[0][0], f.coordinates[0][1]);
-          return { type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: [x, y] } };
+          return { type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: withH(project(f.coordinates[0][0], f.coordinates[0][1]), 0) } };
         }
         if (layer.type === "line") {
-          return { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => project(lat, lng)) } };
+          return { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng], i) => withH(project(lat, lng), i)) } };
         }
-        const ring = f.coordinates.map(([lat, lng]) => project(lat, lng));
+        const ring = f.coordinates.map(([lat, lng], i) => withH(project(lat, lng), i));
         ring.push(ring[0]);
         return { type: "Feature" as const, properties: props, geometry: { type: "Polygon" as const, coordinates: [ring] } };
       }),
@@ -481,7 +532,11 @@ const Index = () => {
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${name}.kml`; a.click();
     } else if (format === "dxf") exportDxf(geojson, name);
     else if (format === "geojson") exportGeoJson(geojson, name);
-    else exportTxtFile(geojson, name);
+    else {
+      // dla strefy PUWG 2000 ustal reprezentatywną długość z pierwszego obiektu
+      const lng0 = layer.features[0]?.coordinates[0]?.[1];
+      exportTxtFile(geojson, name, { precision: exportPrecision(useEpsg), system: useEpsg, lngForPrj: lng0 });
+    }
   }, [layerToGeoJson]);
 
   const handleExportLayers = useCallback((layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => {
@@ -669,6 +724,17 @@ const Index = () => {
           </div>
         )}
 
+        {txtImport && (
+          <TxtImportDialog
+            name={txtImport.name}
+            text={txtImport.text}
+            onConfirm={handleConfirmTxtImport}
+            onCancel={() => setTxtImport(null)}
+          />
+        )}
+
+
+
         {/* Coordinates panel */}
         {clickedCoords && (() => {
           const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
@@ -759,7 +825,7 @@ const Index = () => {
       {isToolsOpen && (
         <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsToolsOpen(false)} />
       )}
-      <div className={`fixed right-0 top-0 z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:z-auto md:shadow-none ${isToolsOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}`}>
+      <div className={`fixed inset-x-0 bottom-0 z-[1200] rounded-t-2xl bg-background shadow-2xl transition-transform duration-300 md:relative md:inset-auto md:right-0 md:top-0 md:h-full md:w-72 md:translate-y-0 md:rounded-none md:shadow-none md:z-auto ${isToolsOpen ? "translate-y-0" : "translate-y-full md:translate-y-0"}`}>
         <ToolsPanel
           drawingLayers={drawingLayers}
           activeDrawLayerId={activeDrawLayerId}
