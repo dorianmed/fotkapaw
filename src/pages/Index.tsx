@@ -492,14 +492,17 @@ const Index = () => {
       type: "FeatureCollection",
       features: feats.map((f) => {
         const props = { name: f.attrs.name, description: f.attrs.description };
+        const withH = (xy: [number, number], i: number): number[] => {
+          const h = f.heights?.[i];
+          return typeof h === "number" ? [xy[0], xy[1], h] : [xy[0], xy[1]];
+        };
         if (layer.type === "point") {
-          const [x, y] = project(f.coordinates[0][0], f.coordinates[0][1]);
-          return { type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: [x, y] } };
+          return { type: "Feature" as const, properties: props, geometry: { type: "Point" as const, coordinates: withH(project(f.coordinates[0][0], f.coordinates[0][1]), 0) } };
         }
         if (layer.type === "line") {
-          return { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng]) => project(lat, lng)) } };
+          return { type: "Feature" as const, properties: props, geometry: { type: "LineString" as const, coordinates: f.coordinates.map(([lat, lng], i) => withH(project(lat, lng), i)) } };
         }
-        const ring = f.coordinates.map(([lat, lng]) => project(lat, lng));
+        const ring = f.coordinates.map(([lat, lng], i) => withH(project(lat, lng), i));
         ring.push(ring[0]);
         return { type: "Feature" as const, properties: props, geometry: { type: "Polygon" as const, coordinates: [ring] } };
       }),
@@ -528,7 +531,11 @@ const Index = () => {
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${name}.kml`; a.click();
     } else if (format === "dxf") exportDxf(geojson, name);
     else if (format === "geojson") exportGeoJson(geojson, name);
-    else exportTxtFile(geojson, name);
+    else {
+      // dla strefy PUWG 2000 ustal reprezentatywną długość z pierwszego obiektu
+      const lng0 = layer.features[0]?.coordinates[0]?.[1];
+      exportTxtFile(geojson, name, { precision: exportPrecision(useEpsg), system: useEpsg, lngForPrj: lng0 });
+    }
   }, [layerToGeoJson]);
 
   const handleExportLayers = useCallback((layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => {
