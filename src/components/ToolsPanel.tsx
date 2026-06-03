@@ -259,13 +259,13 @@ const ToolsPanel = ({
         </TabsContent>
 
         {/* ───────── Pomiar GPS ───────── */}
-        <TabsContent value="gps" className="space-y-3 pt-3">
+        <TabsContent value="gps" className="space-y-2 pt-2">
           <div className="space-y-2 rounded-md border p-2">
             <Label className="text-xs font-semibold flex items-center gap-1"><Satellite className="h-3 w-3" /> Pomiar GPS urządzenia</Label>
             <div className="flex items-center gap-2">
               <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Warstwa:</Label>
               <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
-                value={gpsTarget} onChange={(e) => { setGpsTarget(e.target.value); setGpsVertices([]); }}>
+                value={gpsTarget} onChange={(e) => { setGpsTarget(e.target.value); setGpsVertices([]); setGpsHeights([]); }}>
                 <option value="new">+ Nowa warstwa</option>
                 {drawingLayers.map((l) => <option key={l.id} value={l.id}>{l.name} ({typeLabel(l.type)})</option>)}
               </select>
@@ -276,21 +276,38 @@ const ToolsPanel = ({
                 <Input className="h-8 text-xs" placeholder="Nazwa nowej warstwy" value={gpsName} onChange={(e) => setGpsName(e.target.value)} />
                 <div className="grid grid-cols-3 gap-1">
                   {(["point", "line", "polygon"] as GeomType[]).map((t) => (
-                    <Button key={t} variant={gpsType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => { setGpsType(t); setGpsVertices([]); }}>
+                    <Button key={t} variant={gpsType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => { setGpsType(t); setGpsVertices([]); setGpsHeights([]); }}>
                       {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
                     </Button>
                   ))}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
-                  <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
-                    value={gpsCrs} onChange={(e) => setGpsCrs(e.target.value as CoordinateSystem)}>
-                    {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
               </>
             ) : (
-              <p className="text-[10px] text-muted-foreground">Typ z warstwy: <b>{typeLabel(effType)}</b></p>
+              <p className="text-[10px] text-muted-foreground">Typ z warstwy: <b>{typeLabel(effType)}</b> · {(targetLayer?.crs ?? "wgs84").toUpperCase()}</p>
+            )}
+
+            {/* Układ współrzędnych – zawsze dostępny (PL: 1992 / 2000) */}
+            {gpsTarget === "new" && (
+              <div className="flex items-center gap-2">
+                <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
+                <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
+                  value={gpsCrs} onChange={(e) => setGpsCrs(e.target.value as CoordinateSystem)}>
+                  {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Etykieta punktu: numer kolejny lub własna nazwa */}
+            {effType === "point" && (
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-1">
+                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("number")}>Numer</Button>
+                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
+                </div>
+                {gpsLabelMode === "name" && (
+                  <Input className="h-7 text-xs" placeholder="Nazwa punktu (np. słup)" value={gpsLabel} onChange={(e) => setGpsLabel(e.target.value)} />
+                )}
+              </div>
             )}
 
             {effType === "point" ? (
@@ -306,7 +323,7 @@ const ToolsPanel = ({
                   <Check className="mr-1 h-3 w-3" /> Zakończ obiekt
                 </Button>
                 {gpsVertices.length > 0 && (
-                  <Button size="sm" variant="ghost" className="w-full text-[10px]" onClick={() => setGpsVertices([])}>Wyczyść punkty</Button>
+                  <Button size="sm" variant="ghost" className="w-full text-[10px]" onClick={() => { setGpsVertices([]); setGpsHeights([]); }}>Wyczyść punkty</Button>
                 )}
               </div>
             )}
@@ -315,12 +332,13 @@ const ToolsPanel = ({
               <div className="rounded border bg-background p-2 text-[10px] font-mono text-muted-foreground">
                 <div>φ {gpsLast.lat.toFixed(7)}</div>
                 <div>λ {gpsLast.lng.toFixed(7)}</div>
-                <div>± {gpsLast.acc.toFixed(1)} m</div>
+                <div>± {gpsLast.acc.toFixed(1)} m{gpsLast.alt !== null ? ` · H ${gpsLast.alt.toFixed(1)} m` : ""}</div>
               </div>
             )}
           </div>
           <p className="text-[10px] text-muted-foreground">Pozwól przeglądarce na dostęp do lokalizacji. Najlepiej na telefonie z GPS.</p>
         </TabsContent>
+
 
         {/* ───────── Eksport ───────── */}
         <TabsContent value="export" className="space-y-3 pt-3">
