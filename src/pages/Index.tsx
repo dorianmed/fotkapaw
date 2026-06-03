@@ -63,6 +63,9 @@ const Index = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedFeatures, setSelectedFeatures] = useState<{ layerId: string; featureId: string }[]>([]);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [txtImport, setTxtImport] = useState<{ name: string; text: string } | null>(null);
+
+
 
   const selectedFeatureRefs = useMemo(() => selectedFeatures.map((s) => `${s.layerId}:${s.featureId}`), [selectedFeatures]);
   const handleToggleSelectFeature = useCallback((layerId: string, featureId: string) => {
