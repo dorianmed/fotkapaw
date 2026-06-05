@@ -64,6 +64,7 @@ const Index = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedFeatures, setSelectedFeatures] = useState<{ layerId: string; featureId: string }[]>([]);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [txtImport, setTxtImport] = useState<{ name: string; text: string } | null>(null);
 
 
@@ -290,6 +291,8 @@ const Index = () => {
 
   const handleMeasureModeChange = useCallback((mode: MeasureMode) => {
     setMeasureMode(mode); setMeasurement(null); setMeasurementResetSignal((v) => v + 1);
+    // Schowaj lewy panel podczas pomiarów, by nie zasłaniał mapy.
+    if (mode !== "none") setLeftCollapsed(true);
   }, []);
 
   const handleClearMeasurement = useCallback(() => { setMeasurement(null); setMeasurementResetSignal((v) => v + 1); }, []);
@@ -581,8 +584,9 @@ const Index = () => {
         <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      <div className={`fixed z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:relative md:z-auto md:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      <div className={`fixed z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:absolute md:left-2 md:top-2 md:z-[1150] md:h-auto md:max-h-[calc(100vh-1rem)] md:overflow-hidden md:rounded-xl md:border md:shadow-xl ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${leftCollapsed ? "md:-translate-x-[120%]" : "md:translate-x-0"}`}>
         <Sidebar
+          onCollapse={() => setLeftCollapsed(true)}
           photos={photos}
           kmlLayers={kmlLayers}
           sensor={sensor}
@@ -628,8 +632,20 @@ const Index = () => {
           onCheckCoverage={handleCheckCoverage}
           onClearCoverage={handleClearCoverage}
           coverageResults={coverageResults}
+          selectedFeatures={selectedFeatures}
         />
       </div>
+
+      {/* Przycisk ponownego otwarcia lewego panelu (desktop), gdy jest schowany */}
+      {leftCollapsed && (
+        <button
+          onClick={() => setLeftCollapsed(false)}
+          title="Pokaż panel"
+          className="absolute left-4 top-4 z-[1150] hidden rounded-lg border bg-card p-2.5 text-foreground shadow-lg md:block"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       <div className="relative flex-1 w-full">
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute left-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden">

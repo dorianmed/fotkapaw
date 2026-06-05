@@ -103,6 +103,18 @@ const MapView = ({
   const onFenceSelectRef = useRef(onFenceSelect);
   const onClearSelectionRef = useRef(onClearSelection);
   const drawingLayersRef = useRef(drawingLayers);
+  const kmlLayersRef = useRef(kmlLayers);
+
+  // Zbiera wszystkie pary [lat,lng] z dowolnej geometrii GeoJSON.
+  const geomLatLngs = (geom: any): [number, number][] => {
+    const out: [number, number][] = [];
+    const walk = (c: any) => {
+      if (Array.isArray(c) && typeof c[0] === "number") out.push([c[1], c[0]]);
+      else if (Array.isArray(c)) c.forEach(walk);
+    };
+    if (geom?.coordinates) walk(geom.coordinates);
+    return out;
+  };
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
@@ -281,6 +293,15 @@ const MapView = ({
               }
             }
           }
+          // Warstwy wektorowe (import TXT/DXF/SHP/KML)
+          for (const kl of kmlLayersRef.current) {
+            if (!kl.visible) continue;
+            kl.geojson.features.forEach((f, idx) => {
+              if (geomLatLngs(f.geometry).some(([lat, lng]) => bounds.contains([lat, lng]))) {
+                refs.push({ layerId: kl.id, featureId: String(idx) });
+              }
+            });
+          }
           onFenceSelectRef.current?.(refs);
         } else {
           onClearSelectionRef.current?.();
@@ -323,6 +344,7 @@ const MapView = ({
     onFenceSelectRef.current = onFenceSelect;
     onClearSelectionRef.current = onClearSelection;
     drawingLayersRef.current = drawingLayers;
+    kmlLayersRef.current = kmlLayers;
     // Build snap targets: photo centers/corners + drawing layer vertices
     const photoTargets = createPhotoSnapTargets(photos);
     const drawTargets = drawingLayers.flatMap((dl) =>
@@ -340,7 +362,7 @@ const MapView = ({
         : []
     );
     snapTargetsRef.current = [...photoTargets, ...drawTargets];
-  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers, selectMode, onToggleSelectFeature, onFenceSelect, onClearSelection]);
+  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers, kmlLayers, selectMode, onToggleSelectFeature, onFenceSelect, onClearSelection]);
 
   useEffect(() => {
     resetMeasurement();
@@ -546,18 +568,48 @@ const MapView = ({
       if ((layer as any)._isKml) map.removeLayer(layer);
     });
 
+    const selectedRefSet = new Set(selectedFeatureRefs);
+
     kmlLayers.forEach((layer) => {
       if (!layer.visible) return;
-      const geoLayer = L.geoJSON(layer.geojson, {
-        style: { color: layer.color, weight: layer.weight, opacity: 0.8 },
-        onEachFeature: (feature, featureLayer) => {
-          if (feature.properties?.name) featureLayer.bindPopup(feature.properties.name);
-        },
+      // Renderujemy każdy obiekt osobno, by móc go zaznaczać i podświetlać.
+      layer.geojson.features.forEach((feature, idx) => {
+        const ref = `${layer.id}:${idx}`;
+        const isSel = selectedRefSet.has(ref);
+        const color = isSel ? "#f59e0b" : layer.color;
+        const weight = isSel ? layer.weight + 2 : layer.weight;
+        const geoLayer = L.geoJSON(feature as any, {
+          style: { color, weight, opacity: 0.9, fillOpacity: isSel ? 0.4 : 0.2 },
+          pointToLayer: (_f, latlng) =>
+            L.circleMarker(latlng, {
+              radius: isSel ? 7 : 5,
+              color,
+              fillColor: color,
+              fillOpacity: 0.85,
+              weight: isSel ? 3 : 2,
+            }),
+        });
+        (geoLayer as any)._isKml = true;
+
+        const fname = (feature.properties as any)?.name;
+        geoLayer.on("click", (e: L.LeafletMouseEvent) => {
+          if (measureModeRef.current !== "none") return;
+          L.DomEvent.stop(e);
+          if (selectModeRef.current) {
+            onToggleSelectFeatureRef.current?.(layer.id, String(idx));
+            return;
+          }
+          // Pokaż współrzędne w panelu na dole. Dla punktu użyj jego zaimportowanej pozycji.
+          const g = feature.geometry as any;
+          if (g?.type === "Point") onMapClickRef.current?.(g.coordinates[1], g.coordinates[0]);
+          else onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
+        });
+        if (fname && !selectModeRef.current) geoLayer.bindTooltip(String(fname), { direction: "top" });
+
+        geoLayer.addTo(map);
       });
-      (geoLayer as any)._isKml = true;
-      geoLayer.addTo(map);
     });
-  }, [kmlLayers]);
+  }, [kmlLayers, selectedFeatureRefs, onToggleSelectFeature]);
 
   useEffect(() => {
     const map = mapRef.current;

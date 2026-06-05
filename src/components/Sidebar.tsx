@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SearchBar from "@/components/SearchBar";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, OverlapStats, PhotoPoint, SensorConfig } from "@/types/photo";
-import { BarChart3, Camera, ChevronDown, ChevronRight, Download, FileText, FolderOpen, Layers, Map, MoveHorizontal, PenTool, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck, Square, Minus, CircleDot, Plus, Edit2 } from "lucide-react";
+import { BarChart3, Camera, ChevronDown, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Layers, Map, MoveHorizontal, PenTool, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck, Square, Minus, CircleDot, Plus, Edit2 } from "lucide-react";
 import { CoverageResult } from "@/lib/coverageUtils";
 import { Slider } from "@/components/ui/slider";
 import { DrawingLayer } from "@/types/drawing";
@@ -16,13 +16,13 @@ import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
 import { CoordinateSystem, EXPORT_EPSG, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { useState, ReactNode } from "react";
 
-// Rzutuje GeoJSON (WGS84 [lng,lat]) na wybrany układ i eksportuje do TXT (+ .prj).
-const exportLayerTxt = (layer: KmlLayer, crs: CoordinateSystem) => {
+// Rzutuje GeoJSON (WGS84 [lng,lat]) na wybrany układ i eksportuje do TXT (bez .prj).
+const exportGeojsonTxt = (geojson: GeoJSON.FeatureCollection, name: string, crs: CoordinateSystem) => {
   const conv = (c: number[]): number[] => {
     const [E, N] = projectCoords(c[1], c[0], crs); // wejście [lng,lat]
     return c.length > 2 ? [E, N, c[2]] : [E, N];
   };
-  const features = layer.geojson.features.map((f) => {
+  const features = geojson.features.map((f) => {
     const g = f.geometry as any;
     let geometry = g;
     if (g.type === "Point") geometry = { type: "Point", coordinates: conv(g.coordinates) };
@@ -30,9 +30,9 @@ const exportLayerTxt = (layer: KmlLayer, crs: CoordinateSystem) => {
     else if (g.type === "Polygon") geometry = { type: "Polygon", coordinates: g.coordinates.map((r: number[][]) => r.map(conv)) };
     return { ...f, geometry };
   });
-  const lng0 = (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0]?.[0]
-    ?? (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0];
-  exportTxt({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection, layer.name, {
+  const lng0 = (geojson.features[0]?.geometry as any)?.coordinates?.[0]?.[0]
+    ?? (geojson.features[0]?.geometry as any)?.coordinates?.[0];
+  exportTxt({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection, name, {
     precision: exportPrecision(crs), system: crs, lngForPrj: typeof lng0 === "number" ? lng0 : undefined,
   });
 };
@@ -78,31 +78,33 @@ interface SidebarProps {
   onCheckCoverage: (kmlId: string) => void;
   onClearCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
+  selectedFeatures?: { layerId: string; featureId: string }[];
+  onCollapse?: () => void;
 }
 
-const exportKml = (layer: KmlLayer) => {
-  const features = layer.geojson.features.map((f) => {
+const exportKml = (geojson: GeoJSON.FeatureCollection, name: string) => {
+  const features = geojson.features.map((f) => {
     const coords = (f.geometry as any).coordinates;
-    const name = f.properties?.name || "";
+    const fname = f.properties?.name || "";
     if (f.geometry.type === "Point") {
-      return `<Placemark><name>${name}</name><Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
+      return `<Placemark><name>${fname}</name><Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
     }
     if (f.geometry.type === "LineString") {
       const c = coords.map((p: number[]) => `${p[0]},${p[1]},0`).join(" ");
-      return `<Placemark><name>${name}</name><LineString><coordinates>${c}</coordinates></LineString></Placemark>`;
+      return `<Placemark><name>${fname}</name><LineString><coordinates>${c}</coordinates></LineString></Placemark>`;
     }
     if (f.geometry.type === "Polygon") {
       const c = coords[0].map((p: number[]) => `${p[0]},${p[1]},0`).join(" ");
-      return `<Placemark><name>${name}</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
+      return `<Placemark><name>${fname}</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
     }
     return "";
   }).join("\n");
 
-  const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${layer.name}</name>\n${features}\n</Document></kml>`;
+  const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${name}</name>\n${features}\n</Document></kml>`;
   const blob = new Blob([kmlStr], { type: "application/vnd.google-earth.kml+xml" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${layer.name}.kml`;
+  a.download = `${name}.kml`;
   a.click();
 };
 
@@ -145,6 +147,7 @@ const Sidebar = ({
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
   onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
+  selectedFeatures = [], onCollapse,
 }: SidebarProps) => {
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
@@ -158,13 +161,32 @@ const Sidebar = ({
   const exifSensorCount = photos.filter((p) => p.sensorInfo?.source !== "fallback").length;
   const [vecExportCrs, setVecExportCrs] = useState<CoordinateSystem>("puwg1992");
 
+  // Zwraca GeoJSON ograniczony do zaznaczonych obiektów (jeśli są) + odpowiednią nazwę.
+  const exportSource = (layer: KmlLayer): { geojson: GeoJSON.FeatureCollection; name: string; selCount: number } => {
+    const idxSet = new Set(
+      selectedFeatures.filter((s) => s.layerId === layer.id).map((s) => Number(s.featureId)).filter((n) => Number.isFinite(n))
+    );
+    if (idxSet.size === 0) return { geojson: layer.geojson, name: layer.name, selCount: 0 };
+    return {
+      geojson: { type: "FeatureCollection", features: layer.geojson.features.filter((_, i) => idxSet.has(i)) },
+      name: `${layer.name}_zazn`,
+      selCount: idxSet.size,
+    };
+  };
+
 
   return (
-    <div className="h-full w-80 space-y-3 overflow-y-auto border-r bg-card p-4">
+    <div className="h-full w-80 space-y-3 overflow-y-auto border-r bg-card p-4 md:h-auto md:max-h-[calc(100vh-1rem)] md:border-r-0">
       <div className="flex items-center gap-2">
         <Camera className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-bold text-foreground">Analiza Nalotu</h1>
+        <h1 className="flex-1 text-lg font-bold text-foreground">Analiza Nalotu</h1>
+        {onCollapse && (
+          <Button variant="ghost" size="sm" className="hidden h-7 w-7 p-0 md:inline-flex" onClick={onCollapse} title="Schowaj panel">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
       </div>
+
 
       <SearchBar onResult={onSearchResult} />
 
@@ -248,7 +270,9 @@ const Sidebar = ({
             </select>
           </div>
         )}
-        {kmlLayers.map((layer) => (
+        {kmlLayers.map((layer) => {
+          const src = exportSource(layer);
+          return (
           <div key={layer.id} className="space-y-1 rounded-md border p-2">
             <div className="flex items-center justify-between gap-1 text-sm">
               <span className="flex-1 cursor-pointer truncate text-foreground hover:underline"
@@ -261,13 +285,16 @@ const Sidebar = ({
                 <Button variant="ghost" size="sm" onClick={() => onToggleKmlLayer(layer.id)}>
                   {layer.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => exportKml(layer)} title="KML"><Download className="h-3 w-3" /></Button>
-                <Button variant="ghost" size="sm" onClick={() => exportDxf(layer.geojson, layer.name)} title="DXF"><span className="text-[9px]">DXF</span></Button>
-                <Button variant="ghost" size="sm" onClick={() => exportGeoJson(layer.geojson, layer.name)} title="GeoJSON"><span className="text-[9px]">GJ</span></Button>
-                <Button variant="ghost" size="sm" onClick={() => exportLayerTxt(layer, vecExportCrs)} title={`TXT (${vecExportCrs.toUpperCase()})`}><span className="text-[9px]">TXT</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportKml(src.geojson, src.name)} title="KML"><Download className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportDxf(src.geojson, src.name)} title="DXF"><span className="text-[9px]">DXF</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportGeoJson(src.geojson, src.name)} title="GeoJSON"><span className="text-[9px]">GJ</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportGeojsonTxt(src.geojson, src.name, vecExportCrs)} title={`TXT (${vecExportCrs.toUpperCase()})`}><span className="text-[9px]">TXT</span></Button>
                 <Button variant="ghost" size="sm" onClick={() => onRemoveKmlLayer(layer.id)}><Trash2 className="h-3 w-3" /></Button>
               </div>
             </div>
+            {src.selCount > 0 && (
+              <p className="text-[10px] font-medium text-amber-600">Eksport tylko zaznaczonych: {src.selCount} obiekt(ów)</p>
+            )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>Grubość:</span>
               <Slider value={[layer.weight]} onValueChange={([v]) => onChangeKmlWeight(layer.id, v)} min={1} max={8} step={1} className="flex-1" />
@@ -301,7 +328,8 @@ const Sidebar = ({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </Section>
 
 
