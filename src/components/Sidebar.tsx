@@ -80,29 +80,29 @@ interface SidebarProps {
   coverageResults: Record<string, CoverageResult>;
 }
 
-const exportKml = (layer: KmlLayer) => {
-  const features = layer.geojson.features.map((f) => {
+const exportKml = (geojson: GeoJSON.FeatureCollection, name: string) => {
+  const features = geojson.features.map((f) => {
     const coords = (f.geometry as any).coordinates;
-    const name = f.properties?.name || "";
+    const fname = f.properties?.name || "";
     if (f.geometry.type === "Point") {
-      return `<Placemark><name>${name}</name><Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
+      return `<Placemark><name>${fname}</name><Point><coordinates>${coords[0]},${coords[1]},0</coordinates></Point></Placemark>`;
     }
     if (f.geometry.type === "LineString") {
       const c = coords.map((p: number[]) => `${p[0]},${p[1]},0`).join(" ");
-      return `<Placemark><name>${name}</name><LineString><coordinates>${c}</coordinates></LineString></Placemark>`;
+      return `<Placemark><name>${fname}</name><LineString><coordinates>${c}</coordinates></LineString></Placemark>`;
     }
     if (f.geometry.type === "Polygon") {
       const c = coords[0].map((p: number[]) => `${p[0]},${p[1]},0`).join(" ");
-      return `<Placemark><name>${name}</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
+      return `<Placemark><name>${fname}</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
     }
     return "";
   }).join("\n");
 
-  const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${layer.name}</name>\n${features}\n</Document></kml>`;
+  const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${name}</name>\n${features}\n</Document></kml>`;
   const blob = new Blob([kmlStr], { type: "application/vnd.google-earth.kml+xml" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${layer.name}.kml`;
+  a.download = `${name}.kml`;
   a.click();
 };
 
