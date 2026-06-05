@@ -568,18 +568,48 @@ const MapView = ({
       if ((layer as any)._isKml) map.removeLayer(layer);
     });
 
+    const selectedRefSet = new Set(selectedFeatureRefs);
+
     kmlLayers.forEach((layer) => {
       if (!layer.visible) return;
-      const geoLayer = L.geoJSON(layer.geojson, {
-        style: { color: layer.color, weight: layer.weight, opacity: 0.8 },
-        onEachFeature: (feature, featureLayer) => {
-          if (feature.properties?.name) featureLayer.bindPopup(feature.properties.name);
-        },
+      // Renderujemy każdy obiekt osobno, by móc go zaznaczać i podświetlać.
+      layer.geojson.features.forEach((feature, idx) => {
+        const ref = `${layer.id}:${idx}`;
+        const isSel = selectedRefSet.has(ref);
+        const color = isSel ? "#f59e0b" : layer.color;
+        const weight = isSel ? layer.weight + 2 : layer.weight;
+        const geoLayer = L.geoJSON(feature as any, {
+          style: { color, weight, opacity: 0.9, fillOpacity: isSel ? 0.4 : 0.2 },
+          pointToLayer: (_f, latlng) =>
+            L.circleMarker(latlng, {
+              radius: isSel ? 7 : 5,
+              color,
+              fillColor: color,
+              fillOpacity: 0.85,
+              weight: isSel ? 3 : 2,
+            }),
+        });
+        (geoLayer as any)._isKml = true;
+
+        const fname = (feature.properties as any)?.name;
+        geoLayer.on("click", (e: L.LeafletMouseEvent) => {
+          if (measureModeRef.current !== "none") return;
+          L.DomEvent.stop(e);
+          if (selectModeRef.current) {
+            onToggleSelectFeatureRef.current?.(layer.id, String(idx));
+            return;
+          }
+          // Pokaż współrzędne w panelu na dole. Dla punktu użyj jego zaimportowanej pozycji.
+          const g = feature.geometry as any;
+          if (g?.type === "Point") onMapClickRef.current?.(g.coordinates[1], g.coordinates[0]);
+          else onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
+        });
+        if (fname && !selectModeRef.current) geoLayer.bindTooltip(String(fname), { direction: "top" });
+
+        geoLayer.addTo(map);
       });
-      (geoLayer as any)._isKml = true;
-      geoLayer.addTo(map);
     });
-  }, [kmlLayers]);
+  }, [kmlLayers, selectedFeatureRefs, onToggleSelectFeature]);
 
   useEffect(() => {
     const map = mapRef.current;
