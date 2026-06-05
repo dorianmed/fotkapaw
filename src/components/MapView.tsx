@@ -362,7 +362,7 @@ const MapView = ({
         : []
     );
     snapTargetsRef.current = [...photoTargets, ...drawTargets];
-  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers, selectMode, onToggleSelectFeature, onFenceSelect, onClearSelection]);
+  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers, kmlLayers, selectMode, onToggleSelectFeature, onFenceSelect, onClearSelection]);
 
   useEffect(() => {
     resetMeasurement();
