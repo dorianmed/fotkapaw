@@ -344,6 +344,7 @@ const MapView = ({
     onFenceSelectRef.current = onFenceSelect;
     onClearSelectionRef.current = onClearSelection;
     drawingLayersRef.current = drawingLayers;
+    kmlLayersRef.current = kmlLayers;
     // Build snap targets: photo centers/corners + drawing layer vertices
     const photoTargets = createPhotoSnapTargets(photos);
     const drawTargets = drawingLayers.flatMap((dl) =>
