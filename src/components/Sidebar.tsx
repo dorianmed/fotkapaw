@@ -78,6 +78,7 @@ interface SidebarProps {
   onCheckCoverage: (kmlId: string) => void;
   onClearCoverage: (kmlId: string) => void;
   coverageResults: Record<string, CoverageResult>;
+  selectedFeatures?: { layerId: string; featureId: string }[];
 }
 
 const exportKml = (geojson: GeoJSON.FeatureCollection, name: string) => {
