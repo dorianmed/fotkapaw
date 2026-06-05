@@ -263,7 +263,9 @@ const Sidebar = ({
             </select>
           </div>
         )}
-        {kmlLayers.map((layer) => (
+        {kmlLayers.map((layer) => {
+          const src = exportSource(layer);
+          return (
           <div key={layer.id} className="space-y-1 rounded-md border p-2">
             <div className="flex items-center justify-between gap-1 text-sm">
               <span className="flex-1 cursor-pointer truncate text-foreground hover:underline"
@@ -276,13 +278,16 @@ const Sidebar = ({
                 <Button variant="ghost" size="sm" onClick={() => onToggleKmlLayer(layer.id)}>
                   {layer.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => exportKml(layer)} title="KML"><Download className="h-3 w-3" /></Button>
-                <Button variant="ghost" size="sm" onClick={() => exportDxf(layer.geojson, layer.name)} title="DXF"><span className="text-[9px]">DXF</span></Button>
-                <Button variant="ghost" size="sm" onClick={() => exportGeoJson(layer.geojson, layer.name)} title="GeoJSON"><span className="text-[9px]">GJ</span></Button>
-                <Button variant="ghost" size="sm" onClick={() => exportLayerTxt(layer, vecExportCrs)} title={`TXT (${vecExportCrs.toUpperCase()})`}><span className="text-[9px]">TXT</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportKml(src.geojson, src.name)} title="KML"><Download className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportDxf(src.geojson, src.name)} title="DXF"><span className="text-[9px]">DXF</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportGeoJson(src.geojson, src.name)} title="GeoJSON"><span className="text-[9px]">GJ</span></Button>
+                <Button variant="ghost" size="sm" onClick={() => exportGeojsonTxt(src.geojson, src.name, vecExportCrs)} title={`TXT (${vecExportCrs.toUpperCase()})`}><span className="text-[9px]">TXT</span></Button>
                 <Button variant="ghost" size="sm" onClick={() => onRemoveKmlLayer(layer.id)}><Trash2 className="h-3 w-3" /></Button>
               </div>
             </div>
+            {src.selCount > 0 && (
+              <p className="text-[10px] font-medium text-amber-600">Eksport tylko zaznaczonych: {src.selCount} obiekt(ów)</p>
+            )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>Grubość:</span>
               <Slider value={[layer.weight]} onValueChange={([v]) => onChangeKmlWeight(layer.id, v)} min={1} max={8} step={1} className="flex-1" />
