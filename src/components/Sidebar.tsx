@@ -160,6 +160,19 @@ const Sidebar = ({
   const exifSensorCount = photos.filter((p) => p.sensorInfo?.source !== "fallback").length;
   const [vecExportCrs, setVecExportCrs] = useState<CoordinateSystem>("puwg1992");
 
+  // Zwraca GeoJSON ograniczony do zaznaczonych obiektów (jeśli są) + odpowiednią nazwę.
+  const exportSource = (layer: KmlLayer): { geojson: GeoJSON.FeatureCollection; name: string; selCount: number } => {
+    const idxSet = new Set(
+      selectedFeatures.filter((s) => s.layerId === layer.id).map((s) => Number(s.featureId)).filter((n) => Number.isFinite(n))
+    );
+    if (idxSet.size === 0) return { geojson: layer.geojson, name: layer.name, selCount: 0 };
+    return {
+      geojson: { type: "FeatureCollection", features: layer.geojson.features.filter((_, i) => idxSet.has(i)) },
+      name: `${layer.name}_zazn`,
+      selCount: idxSet.size,
+    };
+  };
+
 
   return (
     <div className="h-full w-80 space-y-3 overflow-y-auto border-r bg-card p-4">
