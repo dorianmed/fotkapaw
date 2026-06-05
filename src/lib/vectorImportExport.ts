@@ -296,13 +296,36 @@ export function exportTxt(
 
   downloadBlob(new Blob([lines.join("\n")], { type: "text/plain" }), `${name}.txt`);
 
-  if (opts?.system && opts.system !== "wgs84") {
+  // Plik .prj zapisujemy TYLKO na wyraźne żądanie (domyślnie wyłączone),
+  // bo użytkownik chce wyłącznie współrzędne w pliku TXT.
+  if (opts?.withPrj && opts?.system && opts.system !== "wgs84") {
     const prj = prjWkt(opts.system, opts.lngForPrj);
     downloadBlob(new Blob([prj], { type: "text/plain" }), `${name}.prj`);
   }
 }
 
-function downloadBlob(blob: Blob, filename: string) {
+/**
+ * Zapis pliku. Gdy przeglądarka wspiera File System Access API (Chrome/Edge),
+ * pokazuje okno wyboru miejsca zapisu. W przeciwnym razie pobiera plik klasycznie.
+ */
+async function downloadBlob(blob: Blob, filename: string) {
+  const w = window as any;
+  if (typeof w.showSaveFilePicker === "function") {
+    try {
+      const ext = (filename.split(".").pop() || "").toLowerCase();
+      const handle = await w.showSaveFilePicker({
+        suggestedName: filename,
+        types: ext ? [{ description: ext.toUpperCase(), accept: { "application/octet-stream": [`.${ext}`] } }] : undefined,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (e: any) {
+      if (e?.name === "AbortError") return; // użytkownik anulował
+      // w innym wypadku fallback do klasycznego pobierania
+    }
+  }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;
