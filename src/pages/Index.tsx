@@ -628,8 +628,20 @@ const Index = () => {
           onCheckCoverage={handleCheckCoverage}
           onClearCoverage={handleClearCoverage}
           coverageResults={coverageResults}
+          selectedFeatures={selectedFeatures}
         />
       </div>
+
+      {/* Przycisk ponownego otwarcia lewego panelu (desktop), gdy jest schowany */}
+      {leftCollapsed && (
+        <button
+          onClick={() => setLeftCollapsed(false)}
+          title="Pokaż panel"
+          className="absolute left-4 top-4 z-[1150] hidden rounded-lg border bg-card p-2.5 text-foreground shadow-lg md:block"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       <div className="relative flex-1 w-full">
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute left-4 top-4 z-[1300] rounded-lg border bg-card p-3 text-foreground shadow-lg md:hidden">
