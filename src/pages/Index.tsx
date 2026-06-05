@@ -291,6 +291,8 @@ const Index = () => {
 
   const handleMeasureModeChange = useCallback((mode: MeasureMode) => {
     setMeasureMode(mode); setMeasurement(null); setMeasurementResetSignal((v) => v + 1);
+    // Schowaj lewy panel podczas pomiarów, by nie zasłaniał mapy.
+    if (mode !== "none") setLeftCollapsed(true);
   }, []);
 
   const handleClearMeasurement = useCallback(() => { setMeasurement(null); setMeasurementResetSignal((v) => v + 1); }, []);
