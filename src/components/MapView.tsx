@@ -293,6 +293,15 @@ const MapView = ({
               }
             }
           }
+          // Warstwy wektorowe (import TXT/DXF/SHP/KML)
+          for (const kl of kmlLayersRef.current) {
+            if (!kl.visible) continue;
+            kl.geojson.features.forEach((f, idx) => {
+              if (geomLatLngs(f.geometry).some(([lat, lng]) => bounds.contains([lat, lng]))) {
+                refs.push({ layerId: kl.id, featureId: String(idx) });
+              }
+            });
+          }
           onFenceSelectRef.current?.(refs);
         } else {
           onClearSelectionRef.current?.();
