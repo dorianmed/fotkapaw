@@ -147,7 +147,7 @@ const Sidebar = ({
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
   onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
-  selectedFeatures = [],
+  selectedFeatures = [], onCollapse,
 }: SidebarProps) => {
   const avgSpeed = photos.filter((p) => p.speed !== undefined).length > 0
     ? photos.filter((p) => p.speed !== undefined).reduce((s, p) => s + (p.speed ?? 0), 0) / photos.filter((p) => p.speed !== undefined).length
