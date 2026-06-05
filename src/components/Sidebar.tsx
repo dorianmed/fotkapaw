@@ -16,13 +16,13 @@ import { exportDxf, exportGeoJson, exportTxt } from "@/lib/vectorImportExport";
 import { CoordinateSystem, EXPORT_EPSG, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { useState, ReactNode } from "react";
 
-// Rzutuje GeoJSON (WGS84 [lng,lat]) na wybrany układ i eksportuje do TXT (+ .prj).
-const exportLayerTxt = (layer: KmlLayer, crs: CoordinateSystem) => {
+// Rzutuje GeoJSON (WGS84 [lng,lat]) na wybrany układ i eksportuje do TXT (bez .prj).
+const exportGeojsonTxt = (geojson: GeoJSON.FeatureCollection, name: string, crs: CoordinateSystem) => {
   const conv = (c: number[]): number[] => {
     const [E, N] = projectCoords(c[1], c[0], crs); // wejście [lng,lat]
     return c.length > 2 ? [E, N, c[2]] : [E, N];
   };
-  const features = layer.geojson.features.map((f) => {
+  const features = geojson.features.map((f) => {
     const g = f.geometry as any;
     let geometry = g;
     if (g.type === "Point") geometry = { type: "Point", coordinates: conv(g.coordinates) };
@@ -30,9 +30,9 @@ const exportLayerTxt = (layer: KmlLayer, crs: CoordinateSystem) => {
     else if (g.type === "Polygon") geometry = { type: "Polygon", coordinates: g.coordinates.map((r: number[][]) => r.map(conv)) };
     return { ...f, geometry };
   });
-  const lng0 = (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0]?.[0]
-    ?? (layer.geojson.features[0]?.geometry as any)?.coordinates?.[0];
-  exportTxt({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection, layer.name, {
+  const lng0 = (geojson.features[0]?.geometry as any)?.coordinates?.[0]?.[0]
+    ?? (geojson.features[0]?.geometry as any)?.coordinates?.[0];
+  exportTxt({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection, name, {
     precision: exportPrecision(crs), system: crs, lngForPrj: typeof lng0 === "number" ? lng0 : undefined,
   });
 };
