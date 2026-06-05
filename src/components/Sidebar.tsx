@@ -175,11 +175,17 @@ const Sidebar = ({
 
 
   return (
-    <div className="h-full w-80 space-y-3 overflow-y-auto border-r bg-card p-4">
+    <div className="h-full w-80 space-y-3 overflow-y-auto border-r bg-card p-4 md:h-auto md:max-h-[calc(100vh-1rem)] md:border-r-0">
       <div className="flex items-center gap-2">
         <Camera className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-bold text-foreground">Analiza Nalotu</h1>
+        <h1 className="flex-1 text-lg font-bold text-foreground">Analiza Nalotu</h1>
+        {onCollapse && (
+          <Button variant="ghost" size="sm" className="hidden h-7 w-7 p-0 md:inline-flex" onClick={onCollapse} title="Schowaj panel">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
       </div>
+
 
       <SearchBar onResult={onSearchResult} />
 
