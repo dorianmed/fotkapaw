@@ -103,6 +103,18 @@ const MapView = ({
   const onFenceSelectRef = useRef(onFenceSelect);
   const onClearSelectionRef = useRef(onClearSelection);
   const drawingLayersRef = useRef(drawingLayers);
+  const kmlLayersRef = useRef(kmlLayers);
+
+  // Zbiera wszystkie pary [lat,lng] z dowolnej geometrii GeoJSON.
+  const geomLatLngs = (geom: any): [number, number][] => {
+    const out: [number, number][] = [];
+    const walk = (c: any) => {
+      if (Array.isArray(c) && typeof c[0] === "number") out.push([c[1], c[0]]);
+      else if (Array.isArray(c)) c.forEach(walk);
+    };
+    if (geom?.coordinates) walk(geom.coordinates);
+    return out;
+  };
 
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
