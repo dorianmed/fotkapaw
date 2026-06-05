@@ -268,7 +268,7 @@ export function exportGeoJson(geojson: GeoJSON.FeatureCollection, name: string):
 export function exportTxt(
   geojson: GeoJSON.FeatureCollection,
   name: string,
-  opts?: { precision?: number; system?: CoordinateSystem; lngForPrj?: number }
+  opts?: { precision?: number; system?: CoordinateSystem; lngForPrj?: number; withPrj?: boolean }
 ): void {
   const p = opts?.precision ?? 7;
   const lines: string[] = ["obj\tnr\tX\tY\tH\tkod"];
