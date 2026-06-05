@@ -321,7 +321,8 @@ const Sidebar = ({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </Section>
 
 
