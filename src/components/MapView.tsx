@@ -32,7 +32,7 @@ interface MapViewProps {
   measureMode: MeasureMode;
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
-  onMapClick?: (lat: number, lng: number) => void;
+  onMapClick?: (lat: number, lng: number, system?: "wgs84" | "puwg1992" | "puwg2000") => void;
   onMapDblClick?: () => void;
   coverageGaps?: CoverageResult["gaps"];
   drawingLayers?: DrawingLayer[];
