@@ -425,8 +425,10 @@ const Index = () => {
     finalizeDrawingNow();
   }, [activeDrawLayer, finalizeDrawingNow]);
 
-  const handleMapClickInfo = useCallback((lat: number, lng: number) => {
+  const handleMapClickInfo = useCallback((lat: number, lng: number, system?: CoordinateSystem) => {
     setClickedCoords({ lat, lng });
+    // Gdy kliknięto zaimportowany obiekt – pokaż współrzędne w jego układzie.
+    if (system) setCoordSystem(system);
     const photoAtPoint = photos.find((photo) => calcDistance(lat, lng, photo.lat, photo.lng) <= 1);
     setClickedPhotoAltitude(photoAtPoint?.altitude ?? null);
     setClickedTerrainHeight({ loading: true, value: null });
