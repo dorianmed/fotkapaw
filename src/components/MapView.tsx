@@ -708,7 +708,10 @@ const MapView = ({
       drawingPoints.forEach(([lat, lng]) => {
         L.circleMarker([lat, lng], { radius: 4, color, fillColor: color, fillOpacity: 1, weight: 2 }).addTo(layer);
       });
-      if (drawingPoints.length >= 2) {
+      if (drawMode === "polygon" && drawingPoints.length >= 3) {
+        // Podgląd poligonu jako figura zamknięta.
+        L.polygon(drawingPoints, { color, fillColor: color, fillOpacity: 0.15, weight: 2, dashArray: "6 4" }).addTo(layer);
+      } else if (drawingPoints.length >= 2) {
         L.polyline(drawingPoints, { color, weight: 2, dashArray: "6 4" }).addTo(layer);
       }
     }
