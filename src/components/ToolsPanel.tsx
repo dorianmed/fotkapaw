@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DrawingLayer, DrawMode } from "@/types/drawing";
-import { CoordinateSystem, EXPORT_EPSG } from "@/lib/coordinateUtils";
+import { CoordinateSystem, EXPORT_EPSG, formatCoordinates } from "@/lib/coordinateUtils";
 import {
   PenTool, Satellite, Download, Plus, CircleDot, Minus, Square, Eye, EyeOff,
   Trash2, Edit2, MapPin, Crosshair, Check,
@@ -58,6 +58,7 @@ const ToolsPanel = ({
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
   // ── Drawing: nowa warstwa ──
+  const [showAddLayer, setShowAddLayer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<GeomType>("point");
   const [newCrs, setNewCrs] = useState<CoordinateSystem>("puwg1992");
@@ -66,6 +67,7 @@ const ToolsPanel = ({
     const name = newName.trim() || typeLabel(newType);
     onCreateLayer({ name, type: newType, crs: newCrs });
     setNewName("");
+    setShowAddLayer(false);
   };
 
   // ── GPS ──
