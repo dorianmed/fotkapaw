@@ -599,10 +599,10 @@ const MapView = ({
             onToggleSelectFeatureRef.current?.(layer.id, String(idx));
             return;
           }
-          // Pokaż współrzędne w panelu na dole. Dla punktu użyj jego zaimportowanej pozycji.
+          // Pokaż współrzędne w panelu na dole. Dla punktu użyj jego zaimportowanej pozycji i układu.
           const g = feature.geometry as any;
-          if (g?.type === "Point") onMapClickRef.current?.(g.coordinates[1], g.coordinates[0]);
-          else onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
+          if (g?.type === "Point") onMapClickRef.current?.(g.coordinates[1], g.coordinates[0], (layer as any).crs);
+          else onMapClickRef.current?.(e.latlng.lat, e.latlng.lng, (layer as any).crs);
         });
         if (fname && !selectModeRef.current) geoLayer.bindTooltip(String(fname), { direction: "top" });
 
