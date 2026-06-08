@@ -337,7 +337,7 @@ const Index = () => {
     try {
       const geojson = importTxtAdvanced(txtImport.text, opts);
       if (geojson.features.length === 0) { toast.warning("Brak punktów — sprawdź separator / kolumny / linię startową"); return; }
-      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: txtImport.name, visible: true, color: "#6366f1", weight: 2, geojson }]);
+      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: txtImport.name, visible: true, color: "#6366f1", weight: 2, crs: opts.crs, geojson }]);
       toast.success(`Zaimportowano ${geojson.features.length} punktów (${opts.crs.toUpperCase()})`);
       setTxtImport(null);
     } catch (err) { toast.error(`Błąd importu TXT: ${(err as Error).message}`); }
@@ -425,8 +425,10 @@ const Index = () => {
     finalizeDrawingNow();
   }, [activeDrawLayer, finalizeDrawingNow]);
 
-  const handleMapClickInfo = useCallback((lat: number, lng: number) => {
+  const handleMapClickInfo = useCallback((lat: number, lng: number, system?: CoordinateSystem) => {
     setClickedCoords({ lat, lng });
+    // Gdy kliknięto zaimportowany obiekt – pokaż współrzędne w jego układzie.
+    if (system) setCoordSystem(system);
     const photoAtPoint = photos.find((photo) => calcDistance(lat, lng, photo.lat, photo.lng) <= 1);
     setClickedPhotoAltitude(photoAtPoint?.altitude ?? null);
     setClickedTerrainHeight({ loading: true, value: null });

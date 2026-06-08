@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DrawingLayer, DrawMode } from "@/types/drawing";
-import { CoordinateSystem, EXPORT_EPSG } from "@/lib/coordinateUtils";
+import { CoordinateSystem, EXPORT_EPSG, formatCoordinates } from "@/lib/coordinateUtils";
 import {
   PenTool, Satellite, Download, Plus, CircleDot, Minus, Square, Eye, EyeOff,
   Trash2, Edit2, MapPin, Crosshair, Check,
@@ -58,6 +58,7 @@ const ToolsPanel = ({
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
   // ── Drawing: nowa warstwa ──
+  const [showAddLayer, setShowAddLayer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<GeomType>("point");
   const [newCrs, setNewCrs] = useState<CoordinateSystem>("puwg1992");
@@ -66,6 +67,7 @@ const ToolsPanel = ({
     const name = newName.trim() || typeLabel(newType);
     onCreateLayer({ name, type: newType, crs: newCrs });
     setNewName("");
+    setShowAddLayer(false);
   };
 
   // ── GPS ──
@@ -180,32 +182,37 @@ const ToolsPanel = ({
 
 
         {/* ───────── Rysowanie ───────── */}
-        <TabsContent value="draw" className="space-y-3 pt-3">
-          <div className="space-y-2 rounded-md border p-2">
-            <Label className="text-xs font-semibold">Nowa warstwa</Label>
-            <Input className="h-8 text-xs" placeholder="Nazwa (np. drzewo)" value={newName}
-              onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLayer()} />
-            <div className="grid grid-cols-3 gap-1">
-              {(["point", "line", "polygon"] as GeomType[]).map((t) => (
-                <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setNewType(t)}>
-                  {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
-                </Button>
-              ))}
+        <TabsContent value="draw" className="space-y-2 pt-3">
+          <Button size="sm" className="w-full" onClick={() => setShowAddLayer((v) => !v)}>
+            <Plus className="mr-1 h-3 w-3" /> Dodaj obiekt
+          </Button>
+
+          {showAddLayer && (
+            <div className="space-y-2 rounded-md border p-2">
+              <Input className="h-8 text-xs" placeholder="Nazwa obiektu (np. drzewo)" value={newName}
+                onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLayer()} autoFocus />
+              <div className="grid grid-cols-3 gap-1">
+                {(["point", "line", "polygon"] as GeomType[]).map((t) => (
+                  <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setNewType(t)}>
+                    {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
+                <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
+                  value={newCrs} onChange={(e) => setNewCrs(e.target.value as CoordinateSystem)}>
+                  {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <Button size="sm" className="w-full" onClick={addLayer}><Check className="mr-1 h-3 w-3" /> Utwórz</Button>
             </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
-              <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
-                value={newCrs} onChange={(e) => setNewCrs(e.target.value as CoordinateSystem)}>
-                {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-            <Button size="sm" className="w-full" onClick={addLayer}><Plus className="mr-1 h-3 w-3" /> Dodaj warstwę</Button>
-          </div>
+          )}
 
           <p className="text-[10px] text-muted-foreground">
             {activeDrawLayerId
-              ? "Klikaj na mapie. Linie/poligony: dblklik lub Zakończ. ESC = wyjście."
-              : "Aktywuj warstwę aby rysować (kliknij jej nazwę)."}
+              ? "Klikaj na mapie. Linie/poligony: dwuklik lub Zakończ. ESC = wyjście."
+              : "Kliknij nazwę obiektu, aby aktywować rysowanie."}
           </p>
 
           {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
@@ -214,47 +221,33 @@ const ToolsPanel = ({
             </Button>
           )}
 
-          {drawingLayers.length === 0 && <p className="text-xs italic text-muted-foreground">Brak warstw.</p>}
+          {drawingLayers.length === 0 && <p className="text-xs italic text-muted-foreground">Brak obiektów.</p>}
 
+          {/* Każdy obiekt = jedna linia z liczbą rekordów po prawej. */}
           {drawingLayers.map((dl) => {
             const isActive = activeDrawLayerId === dl.id;
             const isEditing = editingLayerId === dl.id;
             return (
-              <div key={dl.id} className={`space-y-1 rounded-md border p-2 ${isActive ? "border-primary ring-1 ring-primary/40" : ""}`}>
-                <div className="flex items-center gap-1">
-                  {typeIcon(dl.type)}
-                  {isEditing ? (
-                    <Input autoFocus defaultValue={dl.name} className="h-6 text-xs flex-1"
-                      onBlur={(e) => { onRenameDrawLayer(dl.id, e.target.value || dl.name); setEditingLayerId(null); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingLayerId(null); }} />
-                  ) : (
-                    <span className="flex-1 cursor-pointer truncate text-xs font-medium text-foreground"
-                      onClick={() => onSetActiveDrawLayer(isActive ? null : dl.id)} title="Kliknij aby aktywować rysowanie">
-                      {dl.name} <span className="text-muted-foreground">({dl.features.length})</span>
-                    </span>
-                  )}
-                  <input type="color" value={dl.color} onChange={(e) => onChangeDrawLayerColor(dl.id, e.target.value)} className="h-5 w-5 cursor-pointer rounded border-0 p-0" title="Kolor" />
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingLayerId(dl.id)} title="Zmień nazwę"><Edit2 className="h-3 w-3" /></Button>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onToggleDrawLayer(dl.id)}>
-                    {dl.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemoveDrawLayer(dl.id)}><Trash2 className="h-3 w-3" /></Button>
-                </div>
-                <p className="text-[10px] text-muted-foreground pl-4">{typeLabel(dl.type)} · {(dl.crs ?? "wgs84").toUpperCase()}</p>
-                {dl.features.length > 0 && (
-                  <div className="max-h-28 overflow-y-auto space-y-0.5 border-t pt-1">
-                    {dl.features.map((f, i) => {
-                      const sel = selectedFeature?.layerId === dl.id && selectedFeature.featureId === f.id;
-                      return (
-                        <button key={f.id} onClick={() => onSelectFeature(dl.id, f.id)}
-                          className={`flex w-full items-center justify-between rounded px-1 py-0.5 text-[10px] text-left hover:bg-muted ${sel ? "bg-muted" : ""}`}>
-                          <span className="truncate text-foreground">{f.attrs.name || `${i + 1}`}</span>
-                          <span className="text-muted-foreground font-mono">{f.coordinates.length}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div key={dl.id} className={`flex items-center gap-1 rounded-md border px-2 py-1 ${isActive ? "border-primary ring-1 ring-primary/40" : ""}`}>
+                {typeIcon(dl.type)}
+                {isEditing ? (
+                  <Input autoFocus defaultValue={dl.name} className="h-6 text-xs flex-1"
+                    onBlur={(e) => { onRenameDrawLayer(dl.id, e.target.value || dl.name); setEditingLayerId(null); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingLayerId(null); }} />
+                ) : (
+                  <span className="flex-1 cursor-pointer truncate text-xs font-medium text-foreground"
+                    onClick={() => onSetActiveDrawLayer(isActive ? null : dl.id)}
+                    title={`${typeLabel(dl.type)} · ${(dl.crs ?? "wgs84").toUpperCase()} — kliknij aby rysować`}>
+                    {dl.name}
+                  </span>
                 )}
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{dl.features.length}</span>
+                <input type="color" value={dl.color} onChange={(e) => onChangeDrawLayerColor(dl.id, e.target.value)} className="h-5 w-5 cursor-pointer rounded border-0 p-0" title="Kolor" />
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingLayerId(dl.id)} title="Zmień nazwę"><Edit2 className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onToggleDrawLayer(dl.id)}>
+                  {dl.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemoveDrawLayer(dl.id)}><Trash2 className="h-3 w-3" /></Button>
               </div>
             );
           })}
@@ -299,23 +292,20 @@ const ToolsPanel = ({
               </div>
             )}
 
-            {/* Etykieta punktu: numer kolejny lub własna nazwa */}
-            {effType === "point" && (
-              <div className="space-y-1">
-                <div className="grid grid-cols-2 gap-1">
-                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("number")}>Numer</Button>
-                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
-                </div>
-                {gpsLabelMode === "name" && (
-                  <Input className="h-7 text-xs" placeholder="Nazwa punktu (np. słup)" value={gpsLabel} onChange={(e) => setGpsLabel(e.target.value)} />
-                )}
-              </div>
-            )}
-
+            {/* Punkt: kompaktowy wybór etykiety + pomiar w jednej linii */}
             {effType === "point" ? (
-              <Button size="sm" className="w-full" disabled={gpsBusy} onClick={measurePoint}>
-                <Crosshair className="mr-1 h-3 w-3" /> {gpsBusy ? "Pomiar…" : "Pomierz punkt"}
-              </Button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1">
+                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className="h-7 px-2 text-[10px]" onClick={() => setGpsLabelMode("number")}>Nr</Button>
+                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className="h-7 px-2 text-[10px]" onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
+                  {gpsLabelMode === "name" && (
+                    <Input className="h-7 text-xs flex-1 min-w-0" placeholder="Nazwa" value={gpsLabel} onChange={(e) => setGpsLabel(e.target.value)} />
+                  )}
+                  <Button size="sm" className="h-7 flex-1 bg-blue-600 text-white hover:bg-blue-700 text-[11px]" disabled={gpsBusy} onClick={measurePoint}>
+                    <Crosshair className="mr-1 h-3 w-3" /> {gpsBusy ? "Pomiar…" : "Pomierz punkt"}
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="space-y-1">
                 <Button size="sm" variant="outline" className="w-full" disabled={gpsBusy} onClick={addVertex}>
@@ -330,13 +320,18 @@ const ToolsPanel = ({
               </div>
             )}
 
-            {gpsLast && (
-              <div className="rounded border bg-background p-2 text-[10px] font-mono text-muted-foreground">
-                <div>φ {gpsLast.lat.toFixed(7)}</div>
-                <div>λ {gpsLast.lng.toFixed(7)}</div>
-                <div>± {gpsLast.acc.toFixed(1)} m{gpsLast.alt !== null ? ` · H ${gpsLast.alt.toFixed(1)} m` : ""}</div>
-              </div>
-            )}
+            {gpsLast && (() => {
+              const effCrs: CoordinateSystem = (targetLayer?.crs as CoordinateSystem) ?? gpsCrs;
+              const c = formatCoordinates(gpsLast.lat, gpsLast.lng, effCrs);
+              return (
+                <div className="rounded border bg-background p-2 text-[10px] font-mono text-muted-foreground">
+                  <div className="font-semibold text-foreground">{c.label}</div>
+                  <div>{c.line1}</div>
+                  <div>{c.line2}</div>
+                  <div>± {gpsLast.acc.toFixed(1)} m{gpsLast.alt !== null ? ` · H ${gpsLast.alt.toFixed(1)} m` : ""}</div>
+                </div>
+              );
+            })()}
           </div>
           <p className="text-[10px] text-muted-foreground">Pozwól przeglądarce na dostęp do lokalizacji. Najlepiej na telefonie z GPS.</p>
         </TabsContent>

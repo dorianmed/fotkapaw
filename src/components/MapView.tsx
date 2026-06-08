@@ -32,7 +32,7 @@ interface MapViewProps {
   measureMode: MeasureMode;
   measurementResetSignal: number;
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
-  onMapClick?: (lat: number, lng: number) => void;
+  onMapClick?: (lat: number, lng: number, system?: "wgs84" | "puwg1992" | "puwg2000") => void;
   onMapDblClick?: () => void;
   coverageGaps?: CoverageResult["gaps"];
   drawingLayers?: DrawingLayer[];
@@ -599,10 +599,10 @@ const MapView = ({
             onToggleSelectFeatureRef.current?.(layer.id, String(idx));
             return;
           }
-          // Pokaż współrzędne w panelu na dole. Dla punktu użyj jego zaimportowanej pozycji.
+          // Pokaż współrzędne w panelu na dole. Dla punktu użyj jego zaimportowanej pozycji i układu.
           const g = feature.geometry as any;
-          if (g?.type === "Point") onMapClickRef.current?.(g.coordinates[1], g.coordinates[0]);
-          else onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
+          if (g?.type === "Point") onMapClickRef.current?.(g.coordinates[1], g.coordinates[0], (layer as any).crs);
+          else onMapClickRef.current?.(e.latlng.lat, e.latlng.lng, (layer as any).crs);
         });
         if (fname && !selectModeRef.current) geoLayer.bindTooltip(String(fname), { direction: "top" });
 
@@ -708,7 +708,10 @@ const MapView = ({
       drawingPoints.forEach(([lat, lng]) => {
         L.circleMarker([lat, lng], { radius: 4, color, fillColor: color, fillOpacity: 1, weight: 2 }).addTo(layer);
       });
-      if (drawingPoints.length >= 2) {
+      if (drawMode === "polygon" && drawingPoints.length >= 3) {
+        // Podgląd poligonu jako figura zamknięta.
+        L.polygon(drawingPoints, { color, fillColor: color, fillOpacity: 0.15, weight: 2, dashArray: "6 4" }).addTo(layer);
+      } else if (drawingPoints.length >= 2) {
         L.polyline(drawingPoints, { color, weight: 2, dashArray: "6 4" }).addTo(layer);
       }
     }

@@ -29,6 +29,8 @@ export interface KmlLayer {
   visible: boolean;
   color: string;
   weight: number;
+  /** Układ, w jakim dane zaimportowano (do wyświetlania współrzędnych). */
+  crs?: "wgs84" | "puwg1992" | "puwg2000";
   geojson: GeoJSON.FeatureCollection;
 }
 
