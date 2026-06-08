@@ -292,23 +292,20 @@ const ToolsPanel = ({
               </div>
             )}
 
-            {/* Etykieta punktu: numer kolejny lub własna nazwa */}
-            {effType === "point" && (
-              <div className="space-y-1">
-                <div className="grid grid-cols-2 gap-1">
-                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("number")}>Numer</Button>
-                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
-                </div>
-                {gpsLabelMode === "name" && (
-                  <Input className="h-7 text-xs" placeholder="Nazwa punktu (np. słup)" value={gpsLabel} onChange={(e) => setGpsLabel(e.target.value)} />
-                )}
-              </div>
-            )}
-
+            {/* Punkt: kompaktowy wybór etykiety + pomiar w jednej linii */}
             {effType === "point" ? (
-              <Button size="sm" className="w-full" disabled={gpsBusy} onClick={measurePoint}>
-                <Crosshair className="mr-1 h-3 w-3" /> {gpsBusy ? "Pomiar…" : "Pomierz punkt"}
-              </Button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1">
+                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className="h-7 px-2 text-[10px]" onClick={() => setGpsLabelMode("number")}>Nr</Button>
+                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className="h-7 px-2 text-[10px]" onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
+                  {gpsLabelMode === "name" && (
+                    <Input className="h-7 text-xs flex-1 min-w-0" placeholder="Nazwa" value={gpsLabel} onChange={(e) => setGpsLabel(e.target.value)} />
+                  )}
+                  <Button size="sm" className="h-7 flex-1 bg-blue-600 text-white hover:bg-blue-700 text-[11px]" disabled={gpsBusy} onClick={measurePoint}>
+                    <Crosshair className="mr-1 h-3 w-3" /> {gpsBusy ? "Pomiar…" : "Pomierz punkt"}
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="space-y-1">
                 <Button size="sm" variant="outline" className="w-full" disabled={gpsBusy} onClick={addVertex}>
@@ -323,13 +320,18 @@ const ToolsPanel = ({
               </div>
             )}
 
-            {gpsLast && (
-              <div className="rounded border bg-background p-2 text-[10px] font-mono text-muted-foreground">
-                <div>φ {gpsLast.lat.toFixed(7)}</div>
-                <div>λ {gpsLast.lng.toFixed(7)}</div>
-                <div>± {gpsLast.acc.toFixed(1)} m{gpsLast.alt !== null ? ` · H ${gpsLast.alt.toFixed(1)} m` : ""}</div>
-              </div>
-            )}
+            {gpsLast && (() => {
+              const effCrs: CoordinateSystem = (targetLayer?.crs as CoordinateSystem) ?? gpsCrs;
+              const c = formatCoordinates(gpsLast.lat, gpsLast.lng, effCrs);
+              return (
+                <div className="rounded border bg-background p-2 text-[10px] font-mono text-muted-foreground">
+                  <div className="font-semibold text-foreground">{c.label}</div>
+                  <div>{c.line1}</div>
+                  <div>{c.line2}</div>
+                  <div>± {gpsLast.acc.toFixed(1)} m{gpsLast.alt !== null ? ` · H ${gpsLast.alt.toFixed(1)} m` : ""}</div>
+                </div>
+              );
+            })()}
           </div>
           <p className="text-[10px] text-muted-foreground">Pozwól przeglądarce na dostęp do lokalizacji. Najlepiej na telefonie z GPS.</p>
         </TabsContent>
