@@ -337,7 +337,7 @@ const Index = () => {
     try {
       const geojson = importTxtAdvanced(txtImport.text, opts);
       if (geojson.features.length === 0) { toast.warning("Brak punktów — sprawdź separator / kolumny / linię startową"); return; }
-      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: txtImport.name, visible: true, color: "#6366f1", weight: 2, geojson }]);
+      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: txtImport.name, visible: true, color: "#6366f1", weight: 2, crs: opts.crs, geojson }]);
       toast.success(`Zaimportowano ${geojson.features.length} punktów (${opts.crs.toUpperCase()})`);
       setTxtImport(null);
     } catch (err) { toast.error(`Błąd importu TXT: ${(err as Error).message}`); }
