@@ -989,6 +989,16 @@ const Index = () => {
           onFinishDrawing={finalizeDrawingNow}
           onAddFeatureToLayer={handleAddFeatureToLayer}
           onExportLayers={handleExportLayers}
+          defaultCrs={defaultCrs}
+          jobs={jobs}
+          activeJobId={activeJobId}
+          onCreateJob={handleCreateJob}
+          onSelectJob={handleSelectJob}
+          onSaveActiveJob={handleSaveActiveJob}
+          onDeleteJob={handleDeleteJob}
+          onExportJob={handleExportJob}
+          onExportAllJobs={handleExportAllJobs}
+          onImportJobs={handleImportJobs}
         />
       </div>
     </div>
