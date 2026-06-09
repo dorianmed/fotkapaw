@@ -329,19 +329,23 @@ const MapView = ({
     };
 
     window.addEventListener("zoom-to-bounds", handleZoom);
+    window.addEventListener("set-map-view", handleSetView);
     map.on("click", handleMapClick);
     map.on("dblclick", handleMapDblClick);
     map.on("mousedown", handleMouseDown);
     map.on("mousemove", handleMouseMove);
     map.on("mouseup", handleMouseUp);
+    map.on("moveend", handleMove);
 
     return () => {
       window.removeEventListener("zoom-to-bounds", handleZoom);
+      window.removeEventListener("set-map-view", handleSetView);
       map.off("click", handleMapClick);
       map.off("dblclick", handleMapDblClick);
       map.off("mousedown", handleMouseDown);
       map.off("mousemove", handleMouseMove);
       map.off("mouseup", handleMouseUp);
+      map.off("moveend", handleMove);
       map.remove();
       mapRef.current = null;
     };
