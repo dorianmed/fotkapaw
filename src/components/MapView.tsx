@@ -354,6 +354,7 @@ const MapView = ({
   useEffect(() => {
     measureModeRef.current = measureMode;
     onMapClickRef.current = onMapClick;
+    onMapMoveRef.current = onMapMove;
     onMapDblClickRef.current = onMapDblClick;
     baseLayerRef.current = baseLayer;
     wmsUrlRef.current = wmsUrl;
