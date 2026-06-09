@@ -948,13 +948,21 @@ const Index = () => {
                   onChange={(e) => handleUpdateFeatureAttrs(selectedFeatureData.layer.id, selectedFeatureData.feature.id, { ...selectedFeatureData.feature.attrs, description: e.target.value })} />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground mb-0.5">Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.)</p>
+                <p className="text-[10px] text-muted-foreground mb-0.5">
+                  Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.) · {formatCoordinates(0, 0, coordSystem).label}
+                </p>
                 <div className="max-h-32 overflow-y-auto rounded border bg-background p-1 font-mono text-[10px] leading-tight">
-                  {selectedFeatureData.feature.coordinates.map(([lat, lng], i) => (
-                    <div key={i}>{i + 1}: {lat.toFixed(6)}, {lng.toFixed(6)}</div>
-                  ))}
+                  {selectedFeatureData.feature.coordinates.map(([lat, lng], i) => {
+                    if (coordSystem === "wgs84") {
+                      return <div key={i}>{i + 1}: {lat.toFixed(7)}, {lng.toFixed(7)}</div>;
+                    }
+                    const [E, N] = projectCoords(lat, lng, coordSystem);
+                    const p = exportPrecision(coordSystem);
+                    return <div key={i}>{i + 1}: X {N.toFixed(p)}, Y {E.toFixed(p)}</div>;
+                  })}
                 </div>
               </div>
+
               <Button variant="destructive" size="sm" className="w-full text-xs h-7"
                 onClick={() => handleDeleteFeature(selectedFeatureData.layer.id, selectedFeatureData.feature.id)}>
                 Usuń obiekt
