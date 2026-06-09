@@ -34,6 +34,7 @@ interface MapViewProps {
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
   onMapClick?: (lat: number, lng: number, system?: "wgs84" | "puwg1992" | "puwg2000") => void;
   onMapDblClick?: () => void;
+  onMapMove?: (lat: number, lng: number, zoom: number) => void;
   coverageGaps?: CoverageResult["gaps"];
   drawingLayers?: DrawingLayer[];
   drawingPoints?: [number, number][];
