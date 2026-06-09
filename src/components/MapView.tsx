@@ -71,6 +71,7 @@ const MapView = ({
   onMeasurementChange,
   onMapClick,
   onMapDblClick,
+  onMapMove,
   coverageGaps = [],
   drawingLayers = [],
   drawingPoints = [],
