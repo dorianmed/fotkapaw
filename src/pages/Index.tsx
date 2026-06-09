@@ -830,6 +830,7 @@ const Index = () => {
           onMeasurementChange={setMeasurement}
           onMapClick={handleMapClickInfo}
           onMapDblClick={handleMapDblClickForDrawing}
+          onMapMove={handleMapMove}
           coverageGaps={coverageGaps}
           drawingLayers={drawingLayers}
           drawingPoints={drawingPoints}
