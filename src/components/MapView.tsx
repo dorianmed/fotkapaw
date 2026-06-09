@@ -94,6 +94,7 @@ const MapView = ({
   const measureModeRef = useRef<MeasureMode>(measureMode);
   const onMapClickRef = useRef(onMapClick);
   const onMapDblClickRef = useRef(onMapDblClick);
+  const onMapMoveRef = useRef(onMapMove);
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
   const drawingLayerRef = useRef<L.LayerGroup | null>(null);
   const baseLayerRef = useRef(baseLayer);
