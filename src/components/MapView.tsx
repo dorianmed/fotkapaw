@@ -242,6 +242,19 @@ const MapView = ({
       map.fitBounds(bounds, { padding: [50, 50] });
     };
 
+    // Ustawienie widoku na lokalizację pracy (JOB).
+    const handleSetView = (event: Event) => {
+      const d = (event as CustomEvent).detail as { lat: number; lng: number; zoom?: number };
+      if (typeof d?.lat === "number" && typeof d?.lng === "number") {
+        map.setView([d.lat, d.lng], d.zoom ?? map.getZoom());
+      }
+    };
+
+    const handleMove = () => {
+      const c = map.getCenter();
+      onMapMoveRef.current?.(c.lat, c.lng, map.getZoom());
+    };
+
     const handleMapClick = (event: L.LeafletMouseEvent) => {
       // W trybie zaznaczania klik obsługuje logika fence (mousedown/up).
       if (selectModeRef.current) return;
