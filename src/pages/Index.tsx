@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
-import { Camera, Menu, X, MousePointer2, PanelRight } from "lucide-react";
+import { Camera, Menu, X, MousePointer2, PanelRight, Trash2 } from "lucide-react";
 import MapView from "@/components/MapView";
 import Sidebar from "@/components/Sidebar";
 import ToolsPanel from "@/components/ToolsPanel";
@@ -20,6 +20,7 @@ import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
 import { importDxf, importShp, importTxtAdvanced, exportDxf, exportGeoJson, exportTxt as exportTxtFile, TxtImportOptions } from "@/lib/vectorImportExport";
 import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
+import { Job, loadJobs, saveJobs, createJob, exportJobToFile, exportAllJobsToFile, parseJobsFile } from "@/lib/jobsStore";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -67,6 +68,16 @@ const Index = () => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [txtImport, setTxtImport] = useState<{ name: string; text: string } | null>(null);
 
+  // ── JOBS (prace) ──
+  const [jobs, setJobs] = useState<Job[]>(() => loadJobs());
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const mapViewRef = useRef<{ lat: number; lng: number; zoom: number } | null>(null);
+  const activeJob = useMemo(() => jobs.find((j) => j.id === activeJobId) ?? null, [jobs, activeJobId]);
+  const defaultCrs: CoordinateSystem = activeJob?.crs ?? "puwg1992";
+  useEffect(() => { saveJobs(jobs); }, [jobs]);
+
+
+
 
 
   const selectedFeatureRefs = useMemo(() => selectedFeatures.map((s) => `${s.layerId}:${s.featureId}`), [selectedFeatures]);
@@ -79,6 +90,38 @@ const Index = () => {
   }, []);
   const handleFenceSelect = useCallback((refs: { layerId: string; featureId: string }[]) => setSelectedFeatures(refs), []);
   const handleClearSelection = useCallback(() => setSelectedFeatures([]), []);
+
+  // Usuwa wszystkie obiekty zaznaczone narzędziem strzałki/ogrodzenia
+  // (zarówno warstwy rysowania, jak i wektorowe KML/TXT/DXF).
+  const handleDeleteSelectedFeatures = useCallback(() => {
+    if (selectedFeatures.length === 0) return;
+    const drawIds = new Map<string, Set<string>>();
+    const kmlIdx = new Map<string, Set<number>>();
+    for (const s of selectedFeatures) {
+      const n = Number(s.featureId);
+      if (Number.isInteger(n) && String(n) === s.featureId) {
+        if (!kmlIdx.has(s.layerId)) kmlIdx.set(s.layerId, new Set());
+        kmlIdx.get(s.layerId)!.add(n);
+      } else {
+        if (!drawIds.has(s.layerId)) drawIds.set(s.layerId, new Set());
+        drawIds.get(s.layerId)!.add(s.featureId);
+      }
+    }
+    const count = selectedFeatures.length;
+    setDrawingLayers((prev) => prev.map((l) => {
+      const ids = drawIds.get(l.id);
+      return ids ? { ...l, features: l.features.filter((f) => !ids.has(f.id)) } : l;
+    }));
+    setKmlLayers((prev) => prev.map((l) => {
+      const idxs = kmlIdx.get(l.id);
+      if (!idxs) return l;
+      return { ...l, geojson: { ...l.geojson, features: l.geojson.features.filter((_, i) => !idxs.has(i)) } };
+    }));
+    setSelectedFeatures([]);
+    setSelectedFeature(null);
+    toast.success(`Usunięto ${count} obiekt(ów)`);
+  }, [selectedFeatures]);
+
 
   const activeDrawLayer = useMemo(() => drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null, [drawingLayers, activeDrawLayerId]);
   const drawMode = activeDrawLayer?.type ?? "none";
@@ -568,6 +611,91 @@ const Index = () => {
     return { layer, feature };
   }, [selectedFeature, drawingLayers]);
 
+  // ---- JOBS handlers ----
+  const handleMapMove = useCallback((lat: number, lng: number, zoom: number) => {
+    mapViewRef.current = { lat, lng, zoom };
+  }, []);
+
+  const handleCreateJob = useCallback((name: string, crs: CoordinateSystem) => {
+    const center = mapViewRef.current ?? undefined;
+    const job = createJob(name, crs, center);
+    setJobs((prev) => [...prev, job]);
+    setActiveJobId(job.id);
+    setCoordSystem(crs);
+    toast.success(`Utworzono pracę „${job.name}” (${crs.toUpperCase()})`);
+  }, []);
+
+  const handleSelectJob = useCallback((id: string) => {
+    const job = jobs.find((j) => j.id === id);
+    if (!job) return;
+    setActiveJobId(id);
+    setCoordSystem(job.crs);
+    setDrawingLayers(job.data.drawingLayers ?? []);
+    setKmlLayers(job.data.kmlLayers ?? []);
+    setActiveDrawLayerId(null);
+    setSelectedFeature(null);
+    setSelectedFeatures([]);
+    if (job.center) {
+      window.dispatchEvent(new CustomEvent("set-map-view", { detail: job.center }));
+    }
+    toast.success(`Wczytano pracę „${job.name}”`);
+  }, [jobs]);
+
+  const handleSaveActiveJob = useCallback(() => {
+    if (!activeJobId) return;
+    const center = mapViewRef.current ?? undefined;
+    setJobs((prev) => prev.map((j) => j.id !== activeJobId ? j : {
+      ...j, updatedAt: Date.now(), center: center ?? j.center,
+      data: { drawingLayers, kmlLayers },
+    }));
+    toast.success("Zapisano pracę");
+  }, [activeJobId, drawingLayers, kmlLayers]);
+
+  const handleDeleteJob = useCallback((id: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+    setActiveJobId((cur) => (cur === id ? null : cur));
+    toast.success("Usunięto pracę");
+  }, []);
+
+  const handleExportJob = useCallback((id: string) => {
+    const job = jobs.find((j) => j.id === id);
+    if (!job) return;
+    // Zapisz aktualny stan, jeśli to aktywna praca.
+    const toExport = id === activeJobId
+      ? { ...job, center: mapViewRef.current ?? job.center, data: { drawingLayers, kmlLayers } }
+      : job;
+    exportJobToFile(toExport);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+
+  const handleExportAllJobs = useCallback(() => {
+    const all = activeJobId
+      ? jobs.map((j) => j.id === activeJobId ? { ...j, center: mapViewRef.current ?? j.center, data: { drawingLayers, kmlLayers } } : j)
+      : jobs;
+    if (all.length === 0) { toast.warning("Brak prac do eksportu"); return; }
+    exportAllJobsToFile(all);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+
+  const handleImportJobs = useCallback(async (file: File) => {
+    try {
+      const imported = parseJobsFile(await file.text());
+      if (imported.length === 0) { toast.warning("Brak prac w pliku"); return; }
+      setJobs((prev) => {
+        const ids = new Set(prev.map((j) => j.id));
+        const merged = [...prev];
+        for (const j of imported) {
+          if (ids.has(j.id)) j.id = `${j.id}-imp${Math.random().toString(36).slice(2, 5)}`;
+          merged.push(j);
+        }
+        return merged;
+      });
+      toast.success(`Zaimportowano ${imported.length} prac(e)`);
+    } catch (e) {
+      toast.error(`Błąd importu prac: ${(e as Error).message}`);
+    }
+  }, []);
+
+
+
   return (
     <div
       className="relative flex h-screen w-screen overflow-hidden bg-background"
@@ -586,7 +714,7 @@ const Index = () => {
         <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      <div className={`fixed z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:absolute md:left-2 md:top-2 md:z-[1150] md:h-auto md:max-h-[calc(100vh-1rem)] md:overflow-hidden md:rounded-xl md:border md:shadow-xl ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${leftCollapsed ? "md:-translate-x-[120%]" : "md:translate-x-0"}`}>
+      <div className={`fixed left-2 top-2 z-[1200] h-auto max-h-[calc(100dvh-1rem)] w-80 overflow-hidden rounded-xl border bg-background shadow-2xl transition-transform duration-300 md:absolute md:left-2 md:top-2 md:z-[1150] md:max-h-[calc(100vh-1rem)] md:shadow-xl ${isSidebarOpen ? "translate-x-0" : "-translate-x-[120%] md:translate-x-0"} ${leftCollapsed ? "md:-translate-x-[120%]" : "md:translate-x-0"}`}>
         <Sidebar
           onCollapse={() => setLeftCollapsed(true)}
           photos={photos}
@@ -670,9 +798,14 @@ const Index = () => {
         {selectMode && selectedFeatures.length > 0 && (
           <div className="absolute right-16 top-20 z-[1100] flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs shadow-lg">
             <span className="font-medium text-foreground">{selectedFeatures.length} zazn.</span>
-            <button onClick={handleClearSelection} className="text-muted-foreground hover:text-foreground">✕</button>
+            <button onClick={handleDeleteSelectedFeatures} title="Usuń zaznaczone obiekty"
+              className="flex items-center gap-1 rounded bg-destructive px-1.5 py-0.5 text-destructive-foreground hover:opacity-90">
+              <Trash2 className="h-3 w-3" /> Usuń
+            </button>
+            <button onClick={handleClearSelection} title="Wyczyść zaznaczenie" className="text-muted-foreground hover:text-foreground">✕</button>
           </div>
         )}
+
 
         {importProgress && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 w-72 rounded-lg border bg-card p-3 shadow-lg">
@@ -697,6 +830,7 @@ const Index = () => {
           onMeasurementChange={setMeasurement}
           onMapClick={handleMapClickInfo}
           onMapDblClick={handleMapDblClickForDrawing}
+          onMapMove={handleMapMove}
           coverageGaps={coverageGaps}
           drawingLayers={drawingLayers}
           drawingPoints={drawingPoints}
@@ -758,7 +892,7 @@ const Index = () => {
           const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
           return (
             <div
-              className="absolute bottom-4 left-4 z-[1000] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground"
+              className="absolute bottom-24 left-4 z-[1000] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground md:bottom-4"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
@@ -814,13 +948,21 @@ const Index = () => {
                   onChange={(e) => handleUpdateFeatureAttrs(selectedFeatureData.layer.id, selectedFeatureData.feature.id, { ...selectedFeatureData.feature.attrs, description: e.target.value })} />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground mb-0.5">Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.)</p>
+                <p className="text-[10px] text-muted-foreground mb-0.5">
+                  Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.) · {formatCoordinates(0, 0, coordSystem).label}
+                </p>
                 <div className="max-h-32 overflow-y-auto rounded border bg-background p-1 font-mono text-[10px] leading-tight">
-                  {selectedFeatureData.feature.coordinates.map(([lat, lng], i) => (
-                    <div key={i}>{i + 1}: {lat.toFixed(6)}, {lng.toFixed(6)}</div>
-                  ))}
+                  {selectedFeatureData.feature.coordinates.map(([lat, lng], i) => {
+                    if (coordSystem === "wgs84") {
+                      return <div key={i}>{i + 1}: {lat.toFixed(7)}, {lng.toFixed(7)}</div>;
+                    }
+                    const [E, N] = projectCoords(lat, lng, coordSystem);
+                    const p = exportPrecision(coordSystem);
+                    return <div key={i}>{i + 1}: X {N.toFixed(p)}, Y {E.toFixed(p)}</div>;
+                  })}
                 </div>
               </div>
+
               <Button variant="destructive" size="sm" className="w-full text-xs h-7"
                 onClick={() => handleDeleteFeature(selectedFeatureData.layer.id, selectedFeatureData.feature.id)}>
                 Usuń obiekt
@@ -861,6 +1003,16 @@ const Index = () => {
           onFinishDrawing={finalizeDrawingNow}
           onAddFeatureToLayer={handleAddFeatureToLayer}
           onExportLayers={handleExportLayers}
+          defaultCrs={defaultCrs}
+          jobs={jobs}
+          activeJobId={activeJobId}
+          onCreateJob={handleCreateJob}
+          onSelectJob={handleSelectJob}
+          onSaveActiveJob={handleSaveActiveJob}
+          onDeleteJob={handleDeleteJob}
+          onExportJob={handleExportJob}
+          onExportAllJobs={handleExportAllJobs}
+          onImportJobs={handleImportJobs}
         />
       </div>
     </div>

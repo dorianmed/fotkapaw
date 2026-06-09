@@ -34,6 +34,7 @@ interface MapViewProps {
   onMeasurementChange?: (summary: MeasurementSummary | null) => void;
   onMapClick?: (lat: number, lng: number, system?: "wgs84" | "puwg1992" | "puwg2000") => void;
   onMapDblClick?: () => void;
+  onMapMove?: (lat: number, lng: number, zoom: number) => void;
   coverageGaps?: CoverageResult["gaps"];
   drawingLayers?: DrawingLayer[];
   drawingPoints?: [number, number][];
@@ -70,6 +71,7 @@ const MapView = ({
   onMeasurementChange,
   onMapClick,
   onMapDblClick,
+  onMapMove,
   coverageGaps = [],
   drawingLayers = [],
   drawingPoints = [],
@@ -92,6 +94,7 @@ const MapView = ({
   const measureModeRef = useRef<MeasureMode>(measureMode);
   const onMapClickRef = useRef(onMapClick);
   const onMapDblClickRef = useRef(onMapDblClick);
+  const onMapMoveRef = useRef(onMapMove);
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
   const drawingLayerRef = useRef<L.LayerGroup | null>(null);
   const baseLayerRef = useRef(baseLayer);
@@ -239,6 +242,19 @@ const MapView = ({
       map.fitBounds(bounds, { padding: [50, 50] });
     };
 
+    // Ustawienie widoku na lokalizację pracy (JOB).
+    const handleSetView = (event: Event) => {
+      const d = (event as CustomEvent).detail as { lat: number; lng: number; zoom?: number };
+      if (typeof d?.lat === "number" && typeof d?.lng === "number") {
+        map.setView([d.lat, d.lng], d.zoom ?? map.getZoom());
+      }
+    };
+
+    const handleMove = () => {
+      const c = map.getCenter();
+      onMapMoveRef.current?.(c.lat, c.lng, map.getZoom());
+    };
+
     const handleMapClick = (event: L.LeafletMouseEvent) => {
       // W trybie zaznaczania klik obsługuje logika fence (mousedown/up).
       if (selectModeRef.current) return;
@@ -313,19 +329,23 @@ const MapView = ({
     };
 
     window.addEventListener("zoom-to-bounds", handleZoom);
+    window.addEventListener("set-map-view", handleSetView);
     map.on("click", handleMapClick);
     map.on("dblclick", handleMapDblClick);
     map.on("mousedown", handleMouseDown);
     map.on("mousemove", handleMouseMove);
     map.on("mouseup", handleMouseUp);
+    map.on("moveend", handleMove);
 
     return () => {
       window.removeEventListener("zoom-to-bounds", handleZoom);
+      window.removeEventListener("set-map-view", handleSetView);
       map.off("click", handleMapClick);
       map.off("dblclick", handleMapDblClick);
       map.off("mousedown", handleMouseDown);
       map.off("mousemove", handleMouseMove);
       map.off("mouseup", handleMouseUp);
+      map.off("moveend", handleMove);
       map.remove();
       mapRef.current = null;
     };
@@ -334,6 +354,7 @@ const MapView = ({
   useEffect(() => {
     measureModeRef.current = measureMode;
     onMapClickRef.current = onMapClick;
+    onMapMoveRef.current = onMapMove;
     onMapDblClickRef.current = onMapDblClick;
     baseLayerRef.current = baseLayer;
     wmsUrlRef.current = wmsUrl;

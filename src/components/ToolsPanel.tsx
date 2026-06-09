@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DrawingLayer, DrawMode } from "@/types/drawing";
 import { CoordinateSystem, EXPORT_EPSG, formatCoordinates } from "@/lib/coordinateUtils";
+import JobsPanel from "@/components/JobsPanel";
+import { Job } from "@/lib/jobsStore";
 import {
   PenTool, Satellite, Download, Plus, CircleDot, Minus, Square, Eye, EyeOff,
   Trash2, Edit2, MapPin, Crosshair, Check,
@@ -37,6 +39,17 @@ interface ToolsPanelProps {
   onFinishDrawing: () => void;
   onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => void;
   onExportLayers: (layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => void;
+  // JOBS
+  defaultCrs: CoordinateSystem;
+  jobs: Job[];
+  activeJobId: string | null;
+  onCreateJob: (name: string, crs: CoordinateSystem) => void;
+  onSelectJob: (id: string) => void;
+  onSaveActiveJob: () => void;
+  onDeleteJob: (id: string) => void;
+  onExportJob: (id: string) => void;
+  onExportAllJobs: () => void;
+  onImportJobs: (file: File) => void;
 }
 
 const typeIcon = (t: string) => t === "point" ? <CircleDot className="h-3 w-3" /> : t === "line" ? <Minus className="h-3 w-3" /> : <Square className="h-3 w-3" />;
@@ -54,6 +67,9 @@ const ToolsPanel = ({
   onCreateLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
   onRenameDrawLayer, onChangeDrawLayerColor, onSelectFeature, onFinishDrawing,
   onAddFeatureToLayer, onExportLayers,
+  defaultCrs,
+  jobs, activeJobId, onCreateJob, onSelectJob, onSaveActiveJob, onDeleteJob,
+  onExportJob, onExportAllJobs, onImportJobs,
 }: ToolsPanelProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
@@ -61,7 +77,7 @@ const ToolsPanel = ({
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<GeomType>("point");
-  const [newCrs, setNewCrs] = useState<CoordinateSystem>("puwg1992");
+  const [newCrs, setNewCrs] = useState<CoordinateSystem>(defaultCrs);
 
   const addLayer = () => {
     const name = newName.trim() || typeLabel(newType);
@@ -74,7 +90,7 @@ const ToolsPanel = ({
   const [gpsTarget, setGpsTarget] = useState<string>("new"); // "new" | layerId
   const [gpsName, setGpsName] = useState("");
   const [gpsType, setGpsType] = useState<GeomType>("point");
-  const [gpsCrs, setGpsCrs] = useState<CoordinateSystem>("puwg1992");
+  const [gpsCrs, setGpsCrs] = useState<CoordinateSystem>(defaultCrs);
   const [gpsVertices, setGpsVertices] = useState<[number, number][]>([]);
   const [gpsHeights, setGpsHeights] = useState<(number | null)[]>([]);
   const [gpsBusy, setGpsBusy] = useState(false);
@@ -82,6 +98,9 @@ const ToolsPanel = ({
   // Etykieta punktu: numer kolejny lub własna nazwa
   const [gpsLabelMode, setGpsLabelMode] = useState<"number" | "name">("number");
   const [gpsLabel, setGpsLabel] = useState("");
+
+  // Gdy zmieni się domyślny układ pracy (JOB) – ustaw go jako domyślny dla nowych warstw/GPS.
+  useEffect(() => { setNewCrs(defaultCrs); setGpsCrs(defaultCrs); }, [defaultCrs]);
 
   const targetLayer = gpsTarget !== "new" ? drawingLayers.find((l) => l.id === gpsTarget) ?? null : null;
   const effType: GeomType = targetLayer ? targetLayer.type : gpsType;
@@ -173,6 +192,22 @@ const ToolsPanel = ({
     <div className="max-h-[65vh] w-full overflow-y-auto border-l bg-card p-2 md:h-full md:max-h-none md:w-72">
       {/* Uchwyt szuflady (tylko mobile) */}
       <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-muted md:hidden" />
+
+      {/* ───────── JOB — prace (element nadrzędny) ───────── */}
+      <div className="mb-2">
+        <JobsPanel
+          jobs={jobs}
+          activeJobId={activeJobId}
+          onCreateJob={onCreateJob}
+          onSelectJob={onSelectJob}
+          onSaveActiveJob={onSaveActiveJob}
+          onDeleteJob={onDeleteJob}
+          onExportJob={onExportJob}
+          onExportAllJobs={onExportAllJobs}
+          onImportJobs={onImportJobs}
+        />
+      </div>
+
       <Tabs defaultValue="draw" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="draw" className="text-xs"><PenTool className="mr-1 h-3 w-3" /> Rysowanie</TabsTrigger>
@@ -209,11 +244,16 @@ const ToolsPanel = ({
             </div>
           )}
 
-          <p className="text-[10px] text-muted-foreground">
-            {activeDrawLayerId
-              ? "Klikaj na mapie. Linie/poligony: dwuklik lub Zakończ. ESC = wyjście."
-              : "Kliknij nazwę obiektu, aby aktywować rysowanie."}
-          </p>
+          <div className="space-y-0.5">
+            <p className="text-[10px] text-muted-foreground">
+              {activeDrawLayerId
+                ? "Klikaj na mapie. Linie/poligony: dwuklik lub Zakończ. ESC = wyjście."
+                : "Kliknij nazwę obiektu, aby aktywować rysowanie."}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Kliknij drugi raz w celu zakończenia warstwy.
+            </p>
+          </div>
 
           {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
             <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
