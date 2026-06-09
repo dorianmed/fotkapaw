@@ -176,7 +176,7 @@ const Sidebar = ({
 
 
   return (
-    <div className="flex h-full w-80 flex-col gap-2 overflow-y-auto border-r bg-card p-3 md:h-auto md:max-h-[calc(100vh-1rem)] md:border-r-0">
+    <div className="flex h-auto max-h-[calc(100dvh-1rem)] w-80 flex-col gap-2 overflow-y-auto bg-card p-3 md:max-h-[calc(100vh-1rem)]">
       <div className="flex items-center gap-2">
         <Camera className="h-5 w-5 text-primary" />
         <h1 className="flex-1 text-lg font-bold text-foreground">Analiza Nalotu</h1>
