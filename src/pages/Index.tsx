@@ -714,7 +714,7 @@ const Index = () => {
         <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      <div className={`fixed z-[1200] h-full w-80 bg-background shadow-2xl transition-transform duration-300 md:absolute md:left-2 md:top-2 md:z-[1150] md:h-auto md:max-h-[calc(100vh-1rem)] md:overflow-hidden md:rounded-xl md:border md:shadow-xl ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} ${leftCollapsed ? "md:-translate-x-[120%]" : "md:translate-x-0"}`}>
+      <div className={`fixed left-2 top-2 z-[1200] h-auto max-h-[calc(100dvh-1rem)] w-80 overflow-hidden rounded-xl border bg-background shadow-2xl transition-transform duration-300 md:absolute md:left-2 md:top-2 md:z-[1150] md:max-h-[calc(100vh-1rem)] md:shadow-xl ${isSidebarOpen ? "translate-x-0" : "-translate-x-[120%] md:translate-x-0"} ${leftCollapsed ? "md:-translate-x-[120%]" : "md:translate-x-0"}`}>
         <Sidebar
           onCollapse={() => setLeftCollapsed(true)}
           photos={photos}
