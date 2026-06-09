@@ -68,6 +68,16 @@ const Index = () => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [txtImport, setTxtImport] = useState<{ name: string; text: string } | null>(null);
 
+  // ── JOBS (prace) ──
+  const [jobs, setJobs] = useState<Job[]>(() => loadJobs());
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const mapViewRef = useRef<{ lat: number; lng: number; zoom: number } | null>(null);
+  const activeJob = useMemo(() => jobs.find((j) => j.id === activeJobId) ?? null, [jobs, activeJobId]);
+  const defaultCrs: CoordinateSystem = activeJob?.crs ?? "puwg1992";
+  useEffect(() => { saveJobs(jobs); }, [jobs]);
+
+
+
 
 
   const selectedFeatureRefs = useMemo(() => selectedFeatures.map((s) => `${s.layerId}:${s.featureId}`), [selectedFeatures]);
