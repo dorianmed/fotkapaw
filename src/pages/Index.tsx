@@ -20,6 +20,7 @@ import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
 import { importDxf, importShp, importTxtAdvanced, exportDxf, exportGeoJson, exportTxt as exportTxtFile, TxtImportOptions } from "@/lib/vectorImportExport";
 import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
+import { Job, loadJobs, saveJobs, createJob, exportJobToFile, exportAllJobsToFile, parseJobsFile } from "@/lib/jobsStore";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
