@@ -192,6 +192,22 @@ const ToolsPanel = ({
     <div className="max-h-[65vh] w-full overflow-y-auto border-l bg-card p-2 md:h-full md:max-h-none md:w-72">
       {/* Uchwyt szuflady (tylko mobile) */}
       <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-muted md:hidden" />
+
+      {/* ───────── JOB — prace (element nadrzędny) ───────── */}
+      <div className="mb-2">
+        <JobsPanel
+          jobs={jobs}
+          activeJobId={activeJobId}
+          onCreateJob={onCreateJob}
+          onSelectJob={onSelectJob}
+          onSaveActiveJob={onSaveActiveJob}
+          onDeleteJob={onDeleteJob}
+          onExportJob={onExportJob}
+          onExportAllJobs={onExportAllJobs}
+          onImportJobs={onImportJobs}
+        />
+      </div>
+
       <Tabs defaultValue="draw" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="draw" className="text-xs"><PenTool className="mr-1 h-3 w-3" /> Rysowanie</TabsTrigger>
