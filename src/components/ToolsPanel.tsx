@@ -39,6 +39,17 @@ interface ToolsPanelProps {
   onFinishDrawing: () => void;
   onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => void;
   onExportLayers: (layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => void;
+  // JOBS
+  defaultCrs: CoordinateSystem;
+  jobs: Job[];
+  activeJobId: string | null;
+  onCreateJob: (name: string, crs: CoordinateSystem) => void;
+  onSelectJob: (id: string) => void;
+  onSaveActiveJob: () => void;
+  onDeleteJob: (id: string) => void;
+  onExportJob: (id: string) => void;
+  onExportAllJobs: () => void;
+  onImportJobs: (file: File) => void;
 }
 
 const typeIcon = (t: string) => t === "point" ? <CircleDot className="h-3 w-3" /> : t === "line" ? <Minus className="h-3 w-3" /> : <Square className="h-3 w-3" />;
