@@ -91,6 +91,38 @@ const Index = () => {
   const handleFenceSelect = useCallback((refs: { layerId: string; featureId: string }[]) => setSelectedFeatures(refs), []);
   const handleClearSelection = useCallback(() => setSelectedFeatures([]), []);
 
+  // Usuwa wszystkie obiekty zaznaczone narzędziem strzałki/ogrodzenia
+  // (zarówno warstwy rysowania, jak i wektorowe KML/TXT/DXF).
+  const handleDeleteSelectedFeatures = useCallback(() => {
+    if (selectedFeatures.length === 0) return;
+    const drawIds = new Map<string, Set<string>>();
+    const kmlIdx = new Map<string, Set<number>>();
+    for (const s of selectedFeatures) {
+      const n = Number(s.featureId);
+      if (Number.isInteger(n) && String(n) === s.featureId) {
+        if (!kmlIdx.has(s.layerId)) kmlIdx.set(s.layerId, new Set());
+        kmlIdx.get(s.layerId)!.add(n);
+      } else {
+        if (!drawIds.has(s.layerId)) drawIds.set(s.layerId, new Set());
+        drawIds.get(s.layerId)!.add(s.featureId);
+      }
+    }
+    const count = selectedFeatures.length;
+    setDrawingLayers((prev) => prev.map((l) => {
+      const ids = drawIds.get(l.id);
+      return ids ? { ...l, features: l.features.filter((f) => !ids.has(f.id)) } : l;
+    }));
+    setKmlLayers((prev) => prev.map((l) => {
+      const idxs = kmlIdx.get(l.id);
+      if (!idxs) return l;
+      return { ...l, geojson: { ...l.geojson, features: l.geojson.features.filter((_, i) => !idxs.has(i)) } };
+    }));
+    setSelectedFeatures([]);
+    setSelectedFeature(null);
+    toast.success(`Usunięto ${count} obiekt(ów)`);
+  }, [selectedFeatures]);
+
+
   const activeDrawLayer = useMemo(() => drawingLayers.find((l) => l.id === activeDrawLayerId) ?? null, [drawingLayers, activeDrawLayerId]);
   const drawMode = activeDrawLayer?.type ?? "none";
 
