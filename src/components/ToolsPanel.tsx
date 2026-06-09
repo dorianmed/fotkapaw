@@ -244,11 +244,16 @@ const ToolsPanel = ({
             </div>
           )}
 
-          <p className="text-[10px] text-muted-foreground">
-            {activeDrawLayerId
-              ? "Klikaj na mapie. Linie/poligony: dwuklik lub Zakończ. ESC = wyjście."
-              : "Kliknij nazwę obiektu, aby aktywować rysowanie."}
-          </p>
+          <div className="space-y-0.5">
+            <p className="text-[10px] text-muted-foreground">
+              {activeDrawLayerId
+                ? "Klikaj na mapie. Linie/poligony: dwuklik lub Zakończ. ESC = wyjście."
+                : "Kliknij nazwę obiektu, aby aktywować rysowanie."}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Kliknij drugi raz w celu zakończenia warstwy.
+            </p>
+          </div>
 
           {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
             <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
