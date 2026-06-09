@@ -99,6 +99,9 @@ const ToolsPanel = ({
   const [gpsLabelMode, setGpsLabelMode] = useState<"number" | "name">("number");
   const [gpsLabel, setGpsLabel] = useState("");
 
+  // Gdy zmieni się domyślny układ pracy (JOB) – ustaw go jako domyślny dla nowych warstw/GPS.
+  useEffect(() => { setNewCrs(defaultCrs); setGpsCrs(defaultCrs); }, [defaultCrs]);
+
   const targetLayer = gpsTarget !== "new" ? drawingLayers.find((l) => l.id === gpsTarget) ?? null : null;
   const effType: GeomType = targetLayer ? targetLayer.type : gpsType;
 
