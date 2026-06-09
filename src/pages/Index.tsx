@@ -611,6 +611,91 @@ const Index = () => {
     return { layer, feature };
   }, [selectedFeature, drawingLayers]);
 
+  // ---- JOBS handlers ----
+  const handleMapMove = useCallback((lat: number, lng: number, zoom: number) => {
+    mapViewRef.current = { lat, lng, zoom };
+  }, []);
+
+  const handleCreateJob = useCallback((name: string, crs: CoordinateSystem) => {
+    const center = mapViewRef.current ?? undefined;
+    const job = createJob(name, crs, center);
+    setJobs((prev) => [...prev, job]);
+    setActiveJobId(job.id);
+    setCoordSystem(crs);
+    toast.success(`Utworzono pracę „${job.name}” (${crs.toUpperCase()})`);
+  }, []);
+
+  const handleSelectJob = useCallback((id: string) => {
+    const job = jobs.find((j) => j.id === id);
+    if (!job) return;
+    setActiveJobId(id);
+    setCoordSystem(job.crs);
+    setDrawingLayers(job.data.drawingLayers ?? []);
+    setKmlLayers(job.data.kmlLayers ?? []);
+    setActiveDrawLayerId(null);
+    setSelectedFeature(null);
+    setSelectedFeatures([]);
+    if (job.center) {
+      window.dispatchEvent(new CustomEvent("set-map-view", { detail: job.center }));
+    }
+    toast.success(`Wczytano pracę „${job.name}”`);
+  }, [jobs]);
+
+  const handleSaveActiveJob = useCallback(() => {
+    if (!activeJobId) return;
+    const center = mapViewRef.current ?? undefined;
+    setJobs((prev) => prev.map((j) => j.id !== activeJobId ? j : {
+      ...j, updatedAt: Date.now(), center: center ?? j.center,
+      data: { drawingLayers, kmlLayers },
+    }));
+    toast.success("Zapisano pracę");
+  }, [activeJobId, drawingLayers, kmlLayers]);
+
+  const handleDeleteJob = useCallback((id: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+    setActiveJobId((cur) => (cur === id ? null : cur));
+    toast.success("Usunięto pracę");
+  }, []);
+
+  const handleExportJob = useCallback((id: string) => {
+    const job = jobs.find((j) => j.id === id);
+    if (!job) return;
+    // Zapisz aktualny stan, jeśli to aktywna praca.
+    const toExport = id === activeJobId
+      ? { ...job, center: mapViewRef.current ?? job.center, data: { drawingLayers, kmlLayers } }
+      : job;
+    exportJobToFile(toExport);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+
+  const handleExportAllJobs = useCallback(() => {
+    const all = activeJobId
+      ? jobs.map((j) => j.id === activeJobId ? { ...j, center: mapViewRef.current ?? j.center, data: { drawingLayers, kmlLayers } } : j)
+      : jobs;
+    if (all.length === 0) { toast.warning("Brak prac do eksportu"); return; }
+    exportAllJobsToFile(all);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+
+  const handleImportJobs = useCallback(async (file: File) => {
+    try {
+      const imported = parseJobsFile(await file.text());
+      if (imported.length === 0) { toast.warning("Brak prac w pliku"); return; }
+      setJobs((prev) => {
+        const ids = new Set(prev.map((j) => j.id));
+        const merged = [...prev];
+        for (const j of imported) {
+          if (ids.has(j.id)) j.id = `${j.id}-imp${Math.random().toString(36).slice(2, 5)}`;
+          merged.push(j);
+        }
+        return merged;
+      });
+      toast.success(`Zaimportowano ${imported.length} prac(e)`);
+    } catch (e) {
+      toast.error(`Błąd importu prac: ${(e as Error).message}`);
+    }
+  }, []);
+
+
+
   return (
     <div
       className="relative flex h-screen w-screen overflow-hidden bg-background"
