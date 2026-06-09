@@ -798,9 +798,14 @@ const Index = () => {
         {selectMode && selectedFeatures.length > 0 && (
           <div className="absolute right-16 top-20 z-[1100] flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs shadow-lg">
             <span className="font-medium text-foreground">{selectedFeatures.length} zazn.</span>
-            <button onClick={handleClearSelection} className="text-muted-foreground hover:text-foreground">✕</button>
+            <button onClick={handleDeleteSelectedFeatures} title="Usuń zaznaczone obiekty"
+              className="flex items-center gap-1 rounded bg-destructive px-1.5 py-0.5 text-destructive-foreground hover:opacity-90">
+              <Trash2 className="h-3 w-3" /> Usuń
+            </button>
+            <button onClick={handleClearSelection} title="Wyczyść zaznaczenie" className="text-muted-foreground hover:text-foreground">✕</button>
           </div>
         )}
+
 
         {importProgress && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 w-72 rounded-lg border bg-card p-3 shadow-lg">
