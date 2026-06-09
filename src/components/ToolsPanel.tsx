@@ -67,6 +67,9 @@ const ToolsPanel = ({
   onCreateLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
   onRenameDrawLayer, onChangeDrawLayerColor, onSelectFeature, onFinishDrawing,
   onAddFeatureToLayer, onExportLayers,
+  defaultCrs,
+  jobs, activeJobId, onCreateJob, onSelectJob, onSaveActiveJob, onDeleteJob,
+  onExportJob, onExportAllJobs, onImportJobs,
 }: ToolsPanelProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
@@ -74,7 +77,7 @@ const ToolsPanel = ({
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<GeomType>("point");
-  const [newCrs, setNewCrs] = useState<CoordinateSystem>("puwg1992");
+  const [newCrs, setNewCrs] = useState<CoordinateSystem>(defaultCrs);
 
   const addLayer = () => {
     const name = newName.trim() || typeLabel(newType);
