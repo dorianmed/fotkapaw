@@ -733,7 +733,7 @@ const Index = () => {
         if (!files.length) return;
         const name = files[0].name.toLowerCase();
         if (name.match(/\.(kml|kmz)$/)) handleImportKml(files[0]);
-        else if (name.match(/\.(dxf|shp|zip|txt|csv)$/)) handleImportVector(files[0]);
+        else if (name.match(/\.(dxf|shp|zip|txt|csv|gml)$/)) handleImportVector(files[0]);
         else startImport(files);
       }}
       onDragOver={(event) => event.preventDefault()}
