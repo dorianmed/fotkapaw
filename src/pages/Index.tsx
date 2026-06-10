@@ -76,6 +76,16 @@ const Index = () => {
   const defaultCrs: CoordinateSystem = activeJob?.crs ?? "puwg1992";
   useEffect(() => { saveJobs(jobs); }, [jobs]);
 
+  // Auto-zapis: każda zmiana warstw/punktów trafia od razu do aktywnej pracy (JOB).
+  useEffect(() => {
+    if (!activeJobId) return;
+    setJobs((prev) => prev.map((j) => (j.id !== activeJobId ? j : {
+      ...j, updatedAt: Date.now(), center: mapViewRef.current ?? j.center,
+      data: { drawingLayers, kmlLayers },
+    })));
+  }, [drawingLayers, kmlLayers, activeJobId]);
+
+
 
 
 
