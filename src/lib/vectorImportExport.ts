@@ -451,7 +451,7 @@ export function exportTxt(
  * Zapis pliku. Gdy przeglądarka wspiera File System Access API (Chrome/Edge),
  * pokazuje okno wyboru miejsca zapisu. W przeciwnym razie pobiera plik klasycznie.
  */
-async function downloadBlob(blob: Blob, filename: string) {
+export async function saveBlob(blob: Blob, filename: string) {
   const w = window as any;
   if (typeof w.showSaveFilePicker === "function") {
     try {
