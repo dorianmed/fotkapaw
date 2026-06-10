@@ -834,6 +834,22 @@ const Index = () => {
           </div>
         )}
 
+        {/* Sterowanie rysowaniem na mapie (widoczne zwłaszcza na telefonie) */}
+        {activeDrawLayerId && (
+          <div className="absolute bottom-24 left-1/2 z-[1300] flex -translate-x-1/2 gap-2 md:hidden">
+            {drawMode !== "point" && drawingPoints.length > 0 && (
+              <Button size="sm" className="shadow-lg" onClick={finalizeDrawingNow}
+                disabled={drawingPoints.length < (drawMode === "line" ? 2 : 3)}>
+                Zakończ obiekt ({drawingPoints.length})
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" className="shadow-lg" onClick={() => { finalizeDrawingNow(); setActiveDrawLayerId(null); }}>
+              Zakończ dodawanie
+            </Button>
+          </div>
+        )}
+
+
 
         {importProgress && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 w-72 rounded-lg border bg-card p-3 shadow-lg">
