@@ -18,7 +18,7 @@ import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords,
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
-import { importDxf, importShp, importTxtAdvanced, exportDxf, exportGeoJson, exportTxt as exportTxtFile, TxtImportOptions } from "@/lib/vectorImportExport";
+import { importDxf, importShp, importTxtAdvanced, importGml, exportDxf, exportGeoJson, exportTxt as exportTxtFile, saveBlob, TxtImportOptions } from "@/lib/vectorImportExport";
 import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
 import { Job, loadJobs, saveJobs, createJob, exportJobToFile, exportAllJobsToFile, parseJobsFile } from "@/lib/jobsStore";
 import { Switch } from "@/components/ui/switch";
