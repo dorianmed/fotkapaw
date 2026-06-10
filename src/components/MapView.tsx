@@ -274,30 +274,39 @@ const MapView = ({
       L.DomEvent.stop(event);
     };
 
-    // ── Zaznaczanie ogrodzeniem (fence) ──
-    let fenceStart: L.LatLng | null = null;
+    // ── Zaznaczanie ogrodzeniem (fence) — pointer events (mysz + dotyk) ──
+    const container = containerRef.current!;
+    let fenceStart: L.Point | null = null; // punkt w układzie kontenera
     let fenceRect: L.Rectangle | null = null;
     let fenceMoved = false;
 
-    const handleMouseDown = (event: L.LeafletMouseEvent) => {
+    const toContainerPoint = (e: PointerEvent): L.Point => {
+      const r = container.getBoundingClientRect();
+      return L.point(e.clientX - r.left, e.clientY - r.top);
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
       if (!selectModeRef.current) return;
-      fenceStart = event.latlng;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      fenceStart = toContainerPoint(e);
       fenceMoved = false;
+      // Wyłącz przesuwanie mapy, aby przeciąganie tworzyło ogrodzenie (także na telefonie).
       map.dragging.disable();
     };
 
-    const handleMouseMove = (event: L.LeafletMouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
       if (!fenceStart) return;
+      const p = toContainerPoint(e);
+      if (!fenceMoved && fenceStart.distanceTo(p) < 6) return;
       fenceMoved = true;
-      const bounds = L.latLngBounds(fenceStart, event.latlng);
+      const bounds = L.latLngBounds(map.containerPointToLatLng(fenceStart), map.containerPointToLatLng(p));
       if (fenceRect) fenceRect.setBounds(bounds);
       else fenceRect = L.rectangle(bounds, { color: "#3b82f6", weight: 1, dashArray: "4 4", fillOpacity: 0.1 }).addTo(map);
     };
 
-    const handleMouseUp = () => {
-      if (!selectModeRef.current) return;
-      map.dragging.enable();
-      if (fenceStart) {
+    const handlePointerUp = () => {
+      if (fenceStart && selectModeRef.current) {
+        map.dragging.enable();
         if (fenceMoved && fenceRect) {
           const bounds = fenceRect.getBounds();
           const refs: { layerId: string; featureId: string }[] = [];
@@ -309,7 +318,7 @@ const MapView = ({
               }
             }
           }
-          // Warstwy wektorowe (import TXT/DXF/SHP/KML)
+          // Warstwy wektorowe (import TXT/DXF/SHP/KML/GML)
           for (const kl of kmlLayersRef.current) {
             if (!kl.visible) continue;
             kl.geojson.features.forEach((f, idx) => {
@@ -319,8 +328,6 @@ const MapView = ({
             });
           }
           onFenceSelectRef.current?.(refs);
-        } else {
-          onClearSelectionRef.current?.();
         }
       }
       fenceStart = null;
@@ -330,21 +337,21 @@ const MapView = ({
 
     window.addEventListener("zoom-to-bounds", handleZoom);
     window.addEventListener("set-map-view", handleSetView);
+    container.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
     map.on("click", handleMapClick);
     map.on("dblclick", handleMapDblClick);
-    map.on("mousedown", handleMouseDown);
-    map.on("mousemove", handleMouseMove);
-    map.on("mouseup", handleMouseUp);
     map.on("moveend", handleMove);
 
     return () => {
       window.removeEventListener("zoom-to-bounds", handleZoom);
       window.removeEventListener("set-map-view", handleSetView);
+      container.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
       map.off("click", handleMapClick);
       map.off("dblclick", handleMapDblClick);
-      map.off("mousedown", handleMouseDown);
-      map.off("mousemove", handleMouseMove);
-      map.off("mouseup", handleMouseUp);
       map.off("moveend", handleMove);
       map.remove();
       mapRef.current = null;
