@@ -475,3 +475,6 @@ export async function saveBlob(blob: Blob, filename: string) {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+// alias wsteczny – wewnętrzne wywołania używają tej samej logiki zapisu
+const downloadBlob = saveBlob;
