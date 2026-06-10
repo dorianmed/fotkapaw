@@ -605,7 +605,7 @@ const Index = () => {
       }).join("\n");
       const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${name}</name>\n${featuresKml}\n</Document></kml>`;
       const blob = new Blob([kmlStr], { type: "application/vnd.google-earth.kml+xml" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${name}.kml`; a.click();
+      saveBlob(blob, `${name}.kml`);
     } else if (format === "dxf") exportDxf(geojson, name);
     else if (format === "geojson") exportGeoJson(geojson, name);
     else {
