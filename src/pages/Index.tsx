@@ -18,7 +18,7 @@ import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords,
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer } from "@/types/drawing";
-import { importDxf, importShp, importTxtAdvanced, exportDxf, exportGeoJson, exportTxt as exportTxtFile, TxtImportOptions } from "@/lib/vectorImportExport";
+import { importDxf, importShp, importTxtAdvanced, importGml, exportDxf, exportGeoJson, exportTxt as exportTxtFile, saveBlob, TxtImportOptions } from "@/lib/vectorImportExport";
 import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
 import { Job, loadJobs, saveJobs, createJob, exportJobToFile, exportAllJobsToFile, parseJobsFile } from "@/lib/jobsStore";
 import { Switch } from "@/components/ui/switch";
@@ -75,6 +75,16 @@ const Index = () => {
   const activeJob = useMemo(() => jobs.find((j) => j.id === activeJobId) ?? null, [jobs, activeJobId]);
   const defaultCrs: CoordinateSystem = activeJob?.crs ?? "puwg1992";
   useEffect(() => { saveJobs(jobs); }, [jobs]);
+
+  // Auto-zapis: każda zmiana warstw/punktów trafia od razu do aktywnej pracy (JOB).
+  useEffect(() => {
+    if (!activeJobId) return;
+    setJobs((prev) => prev.map((j) => (j.id !== activeJobId ? j : {
+      ...j, updatedAt: Date.now(), center: mapViewRef.current ?? j.center,
+      data: { drawingLayers, kmlLayers },
+    })));
+  }, [drawingLayers, kmlLayers, activeJobId]);
+
 
 
 
@@ -365,6 +375,24 @@ const Index = () => {
         setTxtImport({ name: file.name.replace(/\.[^/.]+$/, ""), text });
         return;
       }
+      if (ext === "gml") {
+        const layers = await importGml(file);
+        if (layers.length === 0) { toast.warning("Brak obiektów w pliku GML"); return; }
+        const ts = Date.now();
+        const total = layers.reduce((s, l) => s + l.geojson.features.length, 0);
+        setKmlLayers((prev) => [
+          ...prev,
+          ...layers.map((l, i) => ({
+            id: `gml-${ts}-${i}`, name: l.name, visible: true, color: l.color, weight: 2, crs: l.crs, geojson: l.geojson,
+          })),
+        ]);
+        // dopasuj widok do zaimportowanych danych
+        const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: layers.flatMap((l) => l.geojson.features) };
+        const bounds = L.geoJSON(fc).getBounds();
+        if (bounds.isValid()) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
+        toast.success(`Zaimportowano ${total} obiektów GML w ${layers.length} warstwach`);
+        return;
+      }
       let geojson: GeoJSON.FeatureCollection;
       if (ext === "dxf") geojson = await importDxf(file);
       else if (ext === "shp" || ext === "zip") geojson = await importShp(file);
@@ -577,7 +605,7 @@ const Index = () => {
       }).join("\n");
       const kmlStr = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${name}</name>\n${featuresKml}\n</Document></kml>`;
       const blob = new Blob([kmlStr], { type: "application/vnd.google-earth.kml+xml" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${name}.kml`; a.click();
+      saveBlob(blob, `${name}.kml`);
     } else if (format === "dxf") exportDxf(geojson, name);
     else if (format === "geojson") exportGeoJson(geojson, name);
     else {
@@ -705,7 +733,7 @@ const Index = () => {
         if (!files.length) return;
         const name = files[0].name.toLowerCase();
         if (name.match(/\.(kml|kmz)$/)) handleImportKml(files[0]);
-        else if (name.match(/\.(dxf|shp|zip|txt|csv)$/)) handleImportVector(files[0]);
+        else if (name.match(/\.(dxf|shp|zip|txt|csv|gml)$/)) handleImportVector(files[0]);
         else startImport(files);
       }}
       onDragOver={(event) => event.preventDefault()}
@@ -805,6 +833,22 @@ const Index = () => {
             <button onClick={handleClearSelection} title="Wyczyść zaznaczenie" className="text-muted-foreground hover:text-foreground">✕</button>
           </div>
         )}
+
+        {/* Sterowanie rysowaniem na mapie (widoczne zwłaszcza na telefonie) */}
+        {activeDrawLayerId && (
+          <div className="absolute bottom-24 left-1/2 z-[1300] flex -translate-x-1/2 gap-2 md:hidden">
+            {drawMode !== "point" && drawingPoints.length > 0 && (
+              <Button size="sm" className="shadow-lg" onClick={finalizeDrawingNow}
+                disabled={drawingPoints.length < (drawMode === "line" ? 2 : 3)}>
+                Zakończ obiekt ({drawingPoints.length})
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" className="shadow-lg" onClick={() => { finalizeDrawingNow(); setActiveDrawLayerId(null); }}>
+              Zakończ dodawanie
+            </Button>
+          </div>
+        )}
+
 
 
         {importProgress && (
@@ -930,10 +974,11 @@ const Index = () => {
 
         {/* Attributes panel for selected drawn feature */}
         {selectedFeatureData && (
-          <div className="absolute right-4 top-4 z-[1000] w-72 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs">
+          <div className="absolute left-2 right-2 bottom-2 z-[1400] max-h-[55vh] overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs md:left-auto md:right-4 md:top-4 md:bottom-auto md:w-72">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-foreground">Atrybuty obiektu</h3>
-              <button onClick={() => setSelectedFeature(null)} className="text-muted-foreground hover:text-foreground">✕</button>
+              <button onClick={() => setSelectedFeature(null)} title="Zamknij"
+                className="-mr-1 flex h-8 w-8 items-center justify-center rounded-md text-base text-muted-foreground hover:bg-muted hover:text-foreground">✕</button>
             </div>
             <p className="text-[10px] text-muted-foreground mb-2">Warstwa: {selectedFeatureData.layer.name} · {selectedFeatureData.layer.type}</p>
             <div className="space-y-2">

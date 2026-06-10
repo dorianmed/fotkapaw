@@ -255,10 +255,10 @@ const Sidebar = ({
           </Button>
         </label>
         <label className="block">
-          <input type="file" accept=".dxf,.shp,.zip,.txt,.csv" multiple className="hidden"
+          <input type="file" accept=".dxf,.shp,.zip,.txt,.csv,.gml" multiple className="hidden"
             onChange={(e) => { const files = e.target.files; if (files) Array.from(files).forEach((f) => onImportVector(f)); e.target.value = ""; }} />
           <Button variant="outline" className="w-full" asChild>
-            <span><FileText className="mr-2 h-4 w-4" /> Importuj DXF / SHP / TXT</span>
+            <span><FileText className="mr-2 h-4 w-4" /> Importuj DXF / SHP / TXT / GML</span>
           </Button>
         </label>
         {kmlLayers.length > 0 && (

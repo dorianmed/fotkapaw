@@ -221,6 +221,149 @@ export function importTxt(text: string): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
+// ─── GML Import (EGiB / GESUT / BDOT500) ─────────────────────
+// Obsługuje pliki GML z C-GEO / EWMAPA (posList lub pojedyncze gml:pos).
+// Geometria w EPSG:2176-2179 (PUWG 2000) lub 2180 (PUWG 1992),
+// kolejność współrzędnych: X (północ) Y (wschód).
+
+export interface GmlLayerResult {
+  name: string;
+  color: string;
+  crs: CoordinateSystem;
+  geojson: GeoJSON.FeatureCollection;
+}
+
+interface GmlCategory { key: string; label: string; color: string; }
+
+function gmlCategory(localName: string): GmlCategory {
+  const n = localName;
+  // EGiB
+  if (n.includes("Dzialka")) return { key: "egb-dzialki", label: "Działki ewidencyjne", color: "#16a34a" };
+  if (n.includes("Budynek") || n.includes("BlokBudynku")) return { key: "egb-budynki", label: "Budynki", color: "#ea580c" };
+  if (n.includes("PunktGraniczny")) return { key: "egb-punkty", label: "Punkty graniczne", color: "#dc2626" };
+  if (n.includes("KonturUzytku")) return { key: "egb-uzytki", label: "Kontury użytków", color: "#84cc16" };
+  if (n.includes("KonturKlasyfikacyjny") || n.includes("Klasouzytek")) return { key: "egb-klasy", label: "Kontury klasyfikacyjne", color: "#a16207" };
+  if (n.includes("Adres")) return { key: "egb-adresy", label: "Adresy / punkty adresowe", color: "#7c3aed" };
+  // GESUT
+  if (n.includes("Wodociag")) return { key: "ges-wod", label: "GESUT — sieć wodociągowa", color: "#2563eb" };
+  if (n.includes("Kanaliz")) return { key: "ges-kan", label: "GESUT — sieć kanalizacyjna", color: "#92400e" };
+  if (n.includes("Elektro")) return { key: "ges-en", label: "GESUT — sieć elektroenergetyczna", color: "#dc2626" };
+  if (n.includes("Gaz")) return { key: "ges-gaz", label: "GESUT — sieć gazowa", color: "#f59e0b" };
+  if (n.includes("Cieplow")) return { key: "ges-cieplo", label: "GESUT — sieć cieplownicza", color: "#e11d48" };
+  if (n.includes("Telekom")) return { key: "ges-tel", label: "GESUT — sieć telekomunikacyjna", color: "#0891b2" };
+  if (n.startsWith("GES_")) return { key: "ges-inne", label: "GESUT — inne", color: "#475569" };
+  // BDOT500
+  if (n.includes("Budowle")) return { key: "ot-budowle", label: "BDOT500 — budowle", color: "#b45309" };
+  if (n.includes("Ogrodzenia")) return { key: "ot-ogrodz", label: "BDOT500 — ogrodzenia", color: "#78716c" };
+  if (n.includes("Komunikacja")) return { key: "ot-komun", label: "BDOT500 — komunikacja", color: "#525252" };
+  if (n.includes("Zagospodarowanie")) return { key: "ot-zagosp", label: "BDOT500 — zagospodarowanie", color: "#0d9488" };
+  if (n.startsWith("OT_")) return { key: "ot-inne", label: "BDOT500 — inne", color: "#57534e" };
+  return { key: "inne", label: "GML — inne obiekty", color: "#6366f1" };
+}
+
+function gmlSystem(srsName: string | null): CoordinateSystem {
+  const code = srsName?.match(/(\d{4,5})\s*$/)?.[1] ?? "";
+  if (code === "2180") return "puwg1992";
+  if (code === "4326") return "wgs84";
+  return "puwg2000"; // 2176..2179 oraz domyślnie
+}
+
+function srsOf(el: Element): string | null {
+  let cur: Element | null = el;
+  while (cur) {
+    const s = cur.getAttribute?.("srsName");
+    if (s) return s;
+    cur = cur.parentElement;
+  }
+  const d = Array.from(el.getElementsByTagName("*")).find((e) => e.getAttribute("srsName"));
+  return d?.getAttribute("srsName") ?? null;
+}
+
+function parsePosListText(txt: string): [number, number][] {
+  const nums = txt.trim().split(/\s+/).map(Number).filter((n) => Number.isFinite(n));
+  const out: [number, number][] = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) out.push([nums[i], nums[i + 1]]); // [X północ, Y wschód]
+  return out;
+}
+
+function coordsOf(geomEl: Element): [number, number][] {
+  // dla poligonu bierzemy tylko obwód zewnętrzny (exterior)
+  const exterior = Array.from(geomEl.getElementsByTagName("*")).find((e) => e.localName === "exterior");
+  const scope = exterior ?? geomEl;
+  const posLists = Array.from(scope.getElementsByTagName("*")).filter((e) => e.localName === "posList");
+  if (posLists.length) return posLists.flatMap((pl) => parsePosListText(pl.textContent || ""));
+  const poss = Array.from(scope.getElementsByTagName("*")).filter((e) => e.localName === "pos");
+  return poss.map((p) => {
+    const n = (p.textContent || "").trim().split(/\s+/).map(Number);
+    return [n[0], n[1]] as [number, number];
+  });
+}
+
+function descText(feat: Element, localName: string): string | null {
+  const el = Array.from(feat.getElementsByTagName("*")).find((e) => e.localName === localName);
+  return el?.textContent?.trim() || null;
+}
+
+export async function importGml(file: File): Promise<GmlLayerResult[]> {
+  const text = await file.text();
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length) throw new Error("Niepoprawny plik GML");
+
+  const members = Array.from(doc.getElementsByTagName("*")).filter((el) => el.localName === "featureMember");
+  const groups = new Map<string, { cat: GmlCategory; features: GeoJSON.Feature[]; system: CoordinateSystem }>();
+
+  for (const m of members) {
+    const feat = Array.from(m.children)[0];
+    if (!feat) continue;
+    const ln = feat.localName;
+    // pomijamy elementy prezentacji graficznej i rzędne (etykiety/wysokości)
+    if (ln === "PrezentacjaGraficzna" || /Rzedna$/.test(ln) || ln === "Etykieta") continue;
+
+    // wybór geometrii: poligon > powierzchnia > krzywa > linia > punkt
+    const all = Array.from(feat.getElementsByTagName("*"));
+    const geomEl =
+      all.find((e) => e.localName === "Polygon") ||
+      all.find((e) => e.localName === "Surface") ||
+      all.find((e) => e.localName === "Curve") ||
+      all.find((e) => e.localName === "LineString") ||
+      all.find((e) => e.localName === "Point");
+    if (!geomEl) continue;
+
+    const system = gmlSystem(srsOf(geomEl));
+    const raw = coordsOf(geomEl);
+    if (raw.length === 0) continue;
+
+    const ll = raw.map(([X, Y]) => unprojectCoords(X, Y, system)); // [lat, lng]
+    const ring = ll.map(([lat, lng]) => [lng, lat] as [number, number]);
+
+    const kind = geomEl.localName;
+    let geometry: GeoJSON.Geometry;
+    if (kind === "Point") {
+      geometry = { type: "Point", coordinates: ring[0] };
+    } else if (kind === "Polygon" || kind === "Surface") {
+      const closed = [...ring];
+      const a = closed[0], b = closed[closed.length - 1];
+      if (a && b && (a[0] !== b[0] || a[1] !== b[1])) closed.push(a);
+      geometry = { type: "Polygon", coordinates: [closed] };
+    } else {
+      geometry = { type: "LineString", coordinates: ring };
+    }
+
+    const name = descText(feat, "idDzialki") || descText(feat, "lokalnyId") || ln;
+    const cat = gmlCategory(ln);
+    const g = groups.get(cat.key) ?? { cat, features: [], system };
+    g.features.push({ type: "Feature", properties: { name, klasa: ln }, geometry });
+    groups.set(cat.key, g);
+  }
+
+  return Array.from(groups.values()).map((g) => ({
+    name: g.cat.label,
+    color: g.cat.color,
+    crs: g.system,
+    geojson: { type: "FeatureCollection", features: g.features },
+  }));
+}
+
 // ─── DXF Export ───────────────────────────────────────────────
 
 export function exportDxf(geojson: GeoJSON.FeatureCollection, name: string): void {
@@ -308,7 +451,7 @@ export function exportTxt(
  * Zapis pliku. Gdy przeglądarka wspiera File System Access API (Chrome/Edge),
  * pokazuje okno wyboru miejsca zapisu. W przeciwnym razie pobiera plik klasycznie.
  */
-async function downloadBlob(blob: Blob, filename: string) {
+export async function saveBlob(blob: Blob, filename: string) {
   const w = window as any;
   if (typeof w.showSaveFilePicker === "function") {
     try {
@@ -332,3 +475,6 @@ async function downloadBlob(blob: Blob, filename: string) {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+// alias wsteczny – wewnętrzne wywołania używają tej samej logiki zapisu
+const downloadBlob = saveBlob;
