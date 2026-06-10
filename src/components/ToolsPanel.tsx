@@ -122,6 +122,8 @@ const ToolsPanel = ({
       const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy;
       const alt = typeof pos.coords.altitude === "number" ? pos.coords.altitude : null;
       setGpsLast({ lat, lng, acc, alt });
+      // Wycentruj mapę na pomierzonym punkcie.
+      window.dispatchEvent(new CustomEvent("set-map-view", { detail: { lat, lng, zoom: 19 } }));
       return { coord: [lat, lng], alt };
     } catch (e) {
       toast.error(`Błąd GPS: ${(e as Error).message}`);
