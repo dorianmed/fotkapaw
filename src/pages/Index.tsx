@@ -365,6 +365,24 @@ const Index = () => {
         setTxtImport({ name: file.name.replace(/\.[^/.]+$/, ""), text });
         return;
       }
+      if (ext === "gml") {
+        const layers = await importGml(file);
+        if (layers.length === 0) { toast.warning("Brak obiektów w pliku GML"); return; }
+        const ts = Date.now();
+        const total = layers.reduce((s, l) => s + l.geojson.features.length, 0);
+        setKmlLayers((prev) => [
+          ...prev,
+          ...layers.map((l, i) => ({
+            id: `gml-${ts}-${i}`, name: l.name, visible: true, color: l.color, weight: 2, crs: l.crs, geojson: l.geojson,
+          })),
+        ]);
+        // dopasuj widok do zaimportowanych danych
+        const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: layers.flatMap((l) => l.geojson.features) };
+        const bounds = L.geoJSON(fc).getBounds();
+        if (bounds.isValid()) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
+        toast.success(`Zaimportowano ${total} obiektów GML w ${layers.length} warstwach`);
+        return;
+      }
       let geojson: GeoJSON.FeatureCollection;
       if (ext === "dxf") geojson = await importDxf(file);
       else if (ext === "shp" || ext === "zip") geojson = await importShp(file);
