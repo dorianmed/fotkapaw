@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SearchBar from "@/components/SearchBar";
+import ParcelSearch, { ParcelResult } from "@/components/ParcelSearch";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, OverlapStats, PhotoPoint, SensorConfig } from "@/types/photo";
 import { BarChart3, Camera, ChevronDown, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Layers, Map, MoveHorizontal, PenTool, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck, Square, Minus, CircleDot, Plus, Edit2 } from "lucide-react";
 import { CoverageResult } from "@/lib/coverageUtils";
