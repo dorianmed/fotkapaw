@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SearchBar from "@/components/SearchBar";
+import ParcelSearch, { ParcelResult } from "@/components/ParcelSearch";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, OverlapStats, PhotoPoint, SensorConfig } from "@/types/photo";
 import { BarChart3, Camera, ChevronDown, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Layers, Map, MoveHorizontal, PenTool, Ruler, Trash2, Upload, Eye, EyeOff, ZoomIn, Crosshair, ShieldCheck, Square, Minus, CircleDot, Plus, Edit2 } from "lucide-react";
 import { CoverageResult } from "@/lib/coverageUtils";
@@ -73,6 +74,7 @@ interface SidebarProps {
   onClearPhotos: () => void;
   onZoomToPhotos: () => void;
   onSearchResult: (lat: number, lng: number, label: string) => void;
+  onParcelFound: (result: ParcelResult) => void;
   onMeasureModeChange: (mode: MeasureMode) => void;
   onClearMeasurement: () => void;
   onCheckCoverage: (kmlId: string) => void;
@@ -145,7 +147,7 @@ const Sidebar = ({
   onImportPhotos, onImportKml, onImportVector,
   onToggleFootprints, onFootprintStyleChange, onToggleOverlap, onBaseLayerChange,
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
-  onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
+  onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult, onParcelFound,
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
   selectedFeatures = [], onCollapse,
 }: SidebarProps) => {
@@ -189,6 +191,7 @@ const Sidebar = ({
 
 
       <SearchBar onResult={onSearchResult} />
+      <ParcelSearch onParcelFound={onParcelFound} />
 
       <Separator />
 

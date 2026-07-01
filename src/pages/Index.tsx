@@ -336,6 +336,23 @@ const Index = () => {
     window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds: L.latLngBounds([[lat - 0.01, lng - 0.01], [lat + 0.01, lng + 0.01]]) } }));
   }, []);
 
+  // Wynik wyszukiwarki działek (ULDK GUGiK) — dodaj jako warstwę wektorową i przybliż.
+  const handleParcelFound = useCallback((result: { geojson: any; label: string }) => {
+    const layer: KmlLayer = {
+      id: `parcel-${Date.now()}`,
+      name: `Działka ${result.label}`,
+      visible: true,
+      color: "#f59e0b",
+      weight: 2,
+      geojson: result.geojson,
+    };
+    setKmlLayers((prev) => [...prev, layer]);
+    try {
+      const bounds = L.geoJSON(result.geojson).getBounds();
+      if (bounds.isValid()) window.dispatchEvent(new CustomEvent("zoom-to-bounds", { detail: { bounds } }));
+    } catch { /* ignore */ }
+  }, []);
+
   const handleZoomToPhotos = useCallback(() => {
     if (photos.length === 0) return;
     const bounds = L.latLngBounds(photos.map((p) => [p.lat, p.lng] as [number, number]));
@@ -785,6 +802,7 @@ const Index = () => {
           onClearPhotos={() => { setPhotos([]); setSelectedPhotoIds([]); setMeasurement(null); setMeasurementResetSignal((v) => v + 1); }}
           onZoomToPhotos={handleZoomToPhotos}
           onSearchResult={handleSearchResult}
+          onParcelFound={handleParcelFound}
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
           onCheckCoverage={handleCheckCoverage}
@@ -936,7 +954,7 @@ const Index = () => {
           const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
           return (
             <div
-              className="absolute bottom-24 left-4 z-[1000] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground md:bottom-4"
+              className="absolute bottom-24 left-4 z-[1600] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground md:bottom-4"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
