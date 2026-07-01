@@ -146,7 +146,7 @@ const Sidebar = ({
   onImportPhotos, onImportKml, onImportVector,
   onToggleFootprints, onFootprintStyleChange, onToggleOverlap, onBaseLayerChange,
   onToggleKmlLayer, onRemoveKmlLayer, onChangeKmlColor, onChangeKmlWeight, onZoomToKml,
-  onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult,
+  onSensorChange, onClearPhotos, onZoomToPhotos, onSearchResult, onParcelFound,
   onMeasureModeChange, onClearMeasurement, onCheckCoverage, onClearCoverage, coverageResults,
   selectedFeatures = [], onCollapse,
 }: SidebarProps) => {
