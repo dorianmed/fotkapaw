@@ -73,6 +73,7 @@ interface SidebarProps {
   onClearPhotos: () => void;
   onZoomToPhotos: () => void;
   onSearchResult: (lat: number, lng: number, label: string) => void;
+  onParcelFound: (result: ParcelResult) => void;
   onMeasureModeChange: (mode: MeasureMode) => void;
   onClearMeasurement: () => void;
   onCheckCoverage: (kmlId: string) => void;
