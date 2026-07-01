@@ -191,6 +191,7 @@ const Sidebar = ({
 
 
       <SearchBar onResult={onSearchResult} />
+      <ParcelSearch onParcelFound={onParcelFound} />
 
       <Separator />
 
