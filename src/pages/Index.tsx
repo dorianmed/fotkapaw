@@ -802,6 +802,7 @@ const Index = () => {
           onClearPhotos={() => { setPhotos([]); setSelectedPhotoIds([]); setMeasurement(null); setMeasurementResetSignal((v) => v + 1); }}
           onZoomToPhotos={handleZoomToPhotos}
           onSearchResult={handleSearchResult}
+          onParcelFound={handleParcelFound}
           onMeasureModeChange={handleMeasureModeChange}
           onClearMeasurement={handleClearMeasurement}
           onCheckCoverage={handleCheckCoverage}
