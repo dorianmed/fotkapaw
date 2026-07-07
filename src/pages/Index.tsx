@@ -4,6 +4,7 @@ import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
 import { Camera, Menu, X, MousePointer2, PanelRight, Trash2 } from "lucide-react";
 import MapView from "@/components/MapView";
+import MapControls from "@/components/MapControls";
 import Sidebar from "@/components/Sidebar";
 import ToolsPanel from "@/components/ToolsPanel";
 import TxtImportDialog from "@/components/TxtImportDialog";
