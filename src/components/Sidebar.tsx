@@ -320,12 +320,8 @@ const Sidebar = ({
 
 
 
-      <Section icon={<Map className="h-4 w-4" />} title="Podkład mapy" description="Wybierz mapę bazową i styl zasięgów.">
-        <div className="grid grid-cols-3 gap-1">
-          <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
-          <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("google")}>Google</Button>
-          <Button variant={baseLayer === "wms" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("wms")}>WMS</Button>
-        </div>
+      <Section icon={<Map className="h-4 w-4" />} title="Podkład mapy" description="Styl zasięgów i usługa WMS. Podkład (Mapa / Satelita / WMS) przełączasz ikoną warstw na mapie.">
+        <p className="text-[11px] text-muted-foreground">Aktualny podkład: <b>{baseLayer === "osm" ? "Mapa (OSM)" : baseLayer === "google" ? "Satelita (Google)" : "WMS"}</b></p>
         {baseLayer === "wms" && (
           <div className="space-y-1 rounded border p-2">
             <Label className="text-[10px] text-muted-foreground">Adres WMS (GetCapabilities) – edytowalny</Label>
