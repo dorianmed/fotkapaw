@@ -231,23 +231,6 @@ const Sidebar = ({
         )}
       </Section>
 
-      <Section icon={<Ruler className="h-4 w-4" />} title="Pomiary na mapie" description="Mierz dystans lub powierzchnię klikając na mapie.">
-        <div className="grid grid-cols-3 gap-2">
-          <Button variant={measureMode === "none" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("none")}>Off</Button>
-          <Button variant={measureMode === "distance" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("distance")}>Dystans</Button>
-          <Button variant={measureMode === "area" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("area")}>Pow.</Button>
-        </div>
-        <p className="text-xs text-muted-foreground">Snapping do środków/narożników zdjęć oraz wierzchołków warstw rysowania. Kliknij na narysowany poligon, aby od razu policzyć jego powierzchnię.</p>
-        {measurement && measurement.pointCount > 0 && (
-          <div className="space-y-1 rounded-md border bg-background p-3 text-xs text-foreground">
-            <div className="flex justify-between"><span>Punkty:</span><span className="font-mono">{measurement.pointCount}</span></div>
-            <div className="flex justify-between"><span>Długość:</span><span className="font-mono">{measurement.distanceMeters.toFixed(2)} m</span></div>
-            <div className="flex justify-between"><span>Powierzchnia:</span><span className="font-mono">{measurement.areaSquareMeters.toFixed(2)} m²</span></div>
-            <div className="flex justify-between"><span>Powierzchnia:</span><span className="font-mono">{(measurement.areaSquareMeters / 10000).toFixed(4)} ha</span></div>
-          </div>
-        )}
-        <Button variant="ghost" size="sm" className="w-full" onClick={onClearMeasurement}>Wyczyść pomiar</Button>
-      </Section>
 
       <Section icon={<Layers className="h-4 w-4" />} title="Warstwy wektorowe" description="Importuj KML / DXF / SHP / TXT i zarządzaj warstwami.">
         <label className="block">
