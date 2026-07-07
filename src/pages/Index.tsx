@@ -908,6 +908,15 @@ const Index = () => {
           onClearSelection={handleClearSelection}
         />
 
+        <MapControls
+          measureMode={measureMode}
+          measurement={measurement}
+          onMeasureModeChange={handleMeasureModeChange}
+          onClearMeasurement={handleClearMeasurement}
+          baseLayer={baseLayer}
+          onBaseLayerChange={setBaseLayer}
+        />
+
         {showAglPrompt && (
           <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/50">
             <div className="rounded-lg border bg-card p-6 shadow-xl w-96 space-y-4">
