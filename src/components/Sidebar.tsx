@@ -231,23 +231,6 @@ const Sidebar = ({
         )}
       </Section>
 
-      <Section icon={<Ruler className="h-4 w-4" />} title="Pomiary na mapie" description="Mierz dystans lub powierzchnię klikając na mapie.">
-        <div className="grid grid-cols-3 gap-2">
-          <Button variant={measureMode === "none" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("none")}>Off</Button>
-          <Button variant={measureMode === "distance" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("distance")}>Dystans</Button>
-          <Button variant={measureMode === "area" ? "default" : "outline"} size="sm" onClick={() => onMeasureModeChange("area")}>Pow.</Button>
-        </div>
-        <p className="text-xs text-muted-foreground">Snapping do środków/narożników zdjęć oraz wierzchołków warstw rysowania. Kliknij na narysowany poligon, aby od razu policzyć jego powierzchnię.</p>
-        {measurement && measurement.pointCount > 0 && (
-          <div className="space-y-1 rounded-md border bg-background p-3 text-xs text-foreground">
-            <div className="flex justify-between"><span>Punkty:</span><span className="font-mono">{measurement.pointCount}</span></div>
-            <div className="flex justify-between"><span>Długość:</span><span className="font-mono">{measurement.distanceMeters.toFixed(2)} m</span></div>
-            <div className="flex justify-between"><span>Powierzchnia:</span><span className="font-mono">{measurement.areaSquareMeters.toFixed(2)} m²</span></div>
-            <div className="flex justify-between"><span>Powierzchnia:</span><span className="font-mono">{(measurement.areaSquareMeters / 10000).toFixed(4)} ha</span></div>
-          </div>
-        )}
-        <Button variant="ghost" size="sm" className="w-full" onClick={onClearMeasurement}>Wyczyść pomiar</Button>
-      </Section>
 
       <Section icon={<Layers className="h-4 w-4" />} title="Warstwy wektorowe" description="Importuj KML / DXF / SHP / TXT i zarządzaj warstwami.">
         <label className="block">
@@ -337,12 +320,8 @@ const Sidebar = ({
 
 
 
-      <Section icon={<Map className="h-4 w-4" />} title="Podkład mapy" description="Wybierz mapę bazową i styl zasięgów.">
-        <div className="grid grid-cols-3 gap-1">
-          <Button variant={baseLayer === "osm" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("osm")}>OSM</Button>
-          <Button variant={baseLayer === "google" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("google")}>Google</Button>
-          <Button variant={baseLayer === "wms" ? "default" : "outline"} size="sm" onClick={() => onBaseLayerChange("wms")}>WMS</Button>
-        </div>
+      <Section icon={<Map className="h-4 w-4" />} title="Podkład mapy" description="Styl zasięgów i usługa WMS. Podkład (Mapa / Satelita / WMS) przełączasz ikoną warstw na mapie.">
+        <p className="text-[11px] text-muted-foreground">Aktualny podkład: <b>{baseLayer === "osm" ? "Mapa (OSM)" : baseLayer === "google" ? "Satelita (Google)" : "WMS"}</b></p>
         {baseLayer === "wms" && (
           <div className="space-y-1 rounded border p-2">
             <Label className="text-[10px] text-muted-foreground">Adres WMS (GetCapabilities) – edytowalny</Label>
