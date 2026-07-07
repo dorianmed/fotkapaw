@@ -27,7 +27,7 @@ const MapControls = ({
   const measuring = measureMode !== "none";
 
   return (
-    <div className="absolute right-2 top-28 z-[1100] flex flex-col items-end gap-2">
+    <div className="absolute right-2 top-36 z-[1100] flex flex-col items-end gap-2">
       {/* ── Pomiary (mała linijka pod zoomem) ── */}
       <div className="flex items-start gap-2">
         {measureOpen && (
