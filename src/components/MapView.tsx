@@ -107,6 +107,23 @@ const MapView = ({
   const onClearSelectionRef = useRef(onClearSelection);
   const drawingLayersRef = useRef(drawingLayers);
   const kmlLayersRef = useRef(kmlLayers);
+  const drawModeRef = useRef(drawMode);
+
+  // Przyciąganie (snap) rysowanego punktu do istniejących obiektów w promieniu ~15 px.
+  const snapForDrawing = (latlng: L.LatLng): L.LatLng => {
+    const map = mapRef.current;
+    if (!map) return latlng;
+    const p = map.latLngToContainerPoint(latlng);
+    let best: { lat: number; lng: number } | null = null;
+    let bestD = Infinity;
+    for (const t of snapTargetsRef.current) {
+      const tp = map.latLngToContainerPoint(L.latLng(t.lat, t.lng));
+      const d = p.distanceTo(tp);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    return best && bestD <= 15 ? L.latLng(best.lat, best.lng) : latlng;
+  };
+
 
   // Zbiera wszystkie pary [lat,lng] z dowolnej geometrii GeoJSON.
   const geomLatLngs = (geom: any): [number, number][] => {
@@ -258,7 +275,12 @@ const MapView = ({
     const handleMapClick = (event: L.LeafletMouseEvent) => {
       // W trybie zaznaczania klik obsługuje logika fence (mousedown/up).
       if (selectModeRef.current) return;
-      onMapClickRef.current?.(event.latlng.lat, event.latlng.lng);
+      let latlng = event.latlng;
+      // Podczas rysowania przyciągaj do istniejących obiektów (punkty/wierzchołki).
+      if (measureModeRef.current === "none" && drawModeRef.current !== "none") {
+        latlng = snapForDrawing(latlng);
+      }
+      onMapClickRef.current?.(latlng.lat, latlng.lng);
       if (measureModeRef.current !== "none") {
         addMeasurementPoint(event.latlng.lat, event.latlng.lng);
         return;
@@ -268,6 +290,7 @@ const MapView = ({
         fetchWmsInfo(event);
       }
     };
+
 
     const handleMapDblClick = (event: L.LeafletMouseEvent) => {
       onMapDblClickRef.current?.();
@@ -373,7 +396,8 @@ const MapView = ({
     onClearSelectionRef.current = onClearSelection;
     drawingLayersRef.current = drawingLayers;
     kmlLayersRef.current = kmlLayers;
-    // Build snap targets: photo centers/corners + drawing layer vertices
+    drawModeRef.current = drawMode;
+    // Build snap targets: photo centers/corners + drawing layer vertices + wektory (KML/TXT/DXF/SHP/GML)
     const photoTargets = createPhotoSnapTargets(photos);
     const drawTargets = drawingLayers.flatMap((dl) =>
       dl.visible
@@ -389,8 +413,23 @@ const MapView = ({
           )
         : []
     );
-    snapTargetsRef.current = [...photoTargets, ...drawTargets];
-  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers, kmlLayers, selectMode, onToggleSelectFeature, onFenceSelect, onClearSelection]);
+    const kmlTargets = kmlLayers.flatMap((kl) =>
+      kl.visible
+        ? kl.geojson.features.flatMap((f, fi) =>
+            geomLatLngs(f.geometry).map(([lat, lng], i) => ({
+              id: `${kl.id}-${fi}-${i}`,
+              lat,
+              lng,
+              label: `${kl.name}`,
+              kind: "corner" as const,
+              photoId: "",
+            }))
+          )
+        : []
+    );
+    snapTargetsRef.current = [...photoTargets, ...drawTargets, ...kmlTargets];
+  }, [measureMode, onMapClick, onMapDblClick, photos, baseLayer, wmsUrl, wmsLayer, onWmsPixelInfo, drawingLayers, kmlLayers, drawMode, selectMode, onToggleSelectFeature, onFenceSelect, onClearSelection]);
+
 
   useEffect(() => {
     resetMeasurement();
