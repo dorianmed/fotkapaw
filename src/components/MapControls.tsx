@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ruler, Pentagon, Ban, Layers, Check } from "lucide-react";
+import { Ruler, Pentagon, Ban, Layers, Check, Download, Loader2 } from "lucide-react";
 import { MeasureMode, MeasurementSummary } from "@/types/photo";
 
 interface MapControlsProps {
@@ -9,6 +9,14 @@ interface MapControlsProps {
   onClearMeasurement: () => void;
   baseLayer: "osm" | "google" | "wms";
   onBaseLayerChange: (value: "osm" | "google" | "wms") => void;
+  // WMS
+  wmsUrl: string;
+  wmsLayers: string[];
+  wmsSelectedLayer: string | null;
+  wmsLoading: boolean;
+  onWmsUrlChange: (value: string) => void;
+  onWmsLoadLayers: () => void;
+  onWmsLayerChange: (value: string) => void;
 }
 
 const BASE_OPTIONS: { value: "osm" | "google" | "wms"; label: string; hint: string }[] = [
@@ -20,6 +28,8 @@ const BASE_OPTIONS: { value: "osm" | "google" | "wms"; label: string; hint: stri
 const MapControls = ({
   measureMode, measurement, onMeasureModeChange, onClearMeasurement,
   baseLayer, onBaseLayerChange,
+  wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
+  onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
 }: MapControlsProps) => {
   const [measureOpen, setMeasureOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -27,7 +37,7 @@ const MapControls = ({
   const measuring = measureMode !== "none";
 
   return (
-    <div className="absolute right-2 top-36 z-[1100] flex flex-col items-end gap-2">
+    <div className="absolute right-2 top-56 z-[1100] flex flex-col items-end gap-2">
       {/* ── Pomiary (mała linijka pod zoomem) ── */}
       <div className="flex items-start gap-2">
         {measureOpen && (
@@ -81,11 +91,11 @@ const MapControls = ({
       {/* ── Podkład mapy (ikona warstw → trzy opcje jak w Google) ── */}
       <div className="flex items-start gap-2">
         {layersOpen && (
-          <div className="flex flex-col gap-1 rounded-lg border bg-card p-1 shadow-lg">
+          <div className="flex w-56 flex-col gap-1 rounded-lg border bg-card p-1 shadow-lg">
             {BASE_OPTIONS.map((o) => (
               <button
                 key={o.value}
-                onClick={() => { onBaseLayerChange(o.value); setLayersOpen(false); }}
+                onClick={() => onBaseLayerChange(o.value)}
                 title={o.hint}
                 className={`flex items-center justify-between gap-2 rounded px-2 py-1 text-xs ${baseLayer === o.value ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"}`}
               >
@@ -93,6 +103,41 @@ const MapControls = ({
                 {baseLayer === o.value && <Check className="h-3.5 w-3.5" />}
               </button>
             ))}
+
+            {/* Konfiguracja WMS – rozwija się pod opcją WMS */}
+            {baseLayer === "wms" && (
+              <div className="mt-1 space-y-1.5 rounded-md border bg-muted/40 p-2">
+                <label className="block text-[10px] font-semibold text-muted-foreground">Adres WMS</label>
+                <input
+                  value={wmsUrl}
+                  onChange={(e) => onWmsUrlChange(e.target.value)}
+                  placeholder="https://…/wms"
+                  className="h-7 w-full rounded border bg-background px-1.5 text-[11px] text-foreground"
+                />
+                <button
+                  onClick={onWmsLoadLayers}
+                  disabled={wmsLoading || !wmsUrl}
+                  className="flex h-7 w-full items-center justify-center gap-1.5 rounded bg-primary text-[11px] text-primary-foreground disabled:opacity-50"
+                >
+                  {wmsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  Pobierz warstwy
+                </button>
+                {wmsLayers.length > 0 && (
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-semibold text-muted-foreground">Warstwa domyślna</label>
+                    <select
+                      value={wmsSelectedLayer ?? ""}
+                      onChange={(e) => onWmsLayerChange(e.target.value)}
+                      className="h-7 w-full rounded border bg-background px-1 text-[11px] text-foreground"
+                    >
+                      {wmsLayers.map((l) => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
         <button

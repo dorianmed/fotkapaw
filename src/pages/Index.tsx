@@ -1,8 +1,10 @@
+import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import exifr from "exifr";
 import { kml } from "@tmcw/togeojson";
 import L from "leaflet";
-import { Camera, Menu, X, MousePointer2, PanelRight, Trash2 } from "lucide-react";
+import { Camera, Menu, X, MousePointer2, PanelRight, Trash2, GripVertical } from "lucide-react";
 import MapView from "@/components/MapView";
 import MapControls from "@/components/MapControls";
 import Sidebar from "@/components/Sidebar";
@@ -57,6 +59,27 @@ const Index = () => {
   const [coverageGaps, setCoverageGaps] = useState<CoverageResult["gaps"]>([]);
   const [wmsPixelInfo, setWmsPixelInfo] = useState<{ layer: string; info: string } | null>(null);
   const terrainClickRequestRef = useRef(0);
+  // Pozycja (przeciągalnego) okienka współrzędnych – gdy null, domyślnie lewy dolny róg.
+  const [coordPos, setCoordPos] = useState<{ x: number; y: number } | null>(null);
+  const coordDragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const startCoordDrag = useCallback((e: React.PointerEvent) => {
+    const panel = (e.currentTarget as HTMLElement).closest("[data-coord-panel]") as HTMLElement | null;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    coordDragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    const move = (ev: PointerEvent) => {
+      if (!coordDragRef.current) return;
+      setCoordPos({ x: ev.clientX - coordDragRef.current.dx, y: ev.clientY - coordDragRef.current.dy });
+    };
+    const up = () => {
+      coordDragRef.current = null;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, []);
+
 
   // Drawing layer model
   const [drawingLayers, setDrawingLayers] = useState<DrawingLayer[]>([]);
@@ -915,7 +938,15 @@ const Index = () => {
           onClearMeasurement={handleClearMeasurement}
           baseLayer={baseLayer}
           onBaseLayerChange={setBaseLayer}
+          wmsUrl={wmsUrl}
+          wmsLayers={wmsLayers}
+          wmsSelectedLayer={wmsSelectedLayer}
+          wmsLoading={wmsLoading}
+          onWmsUrlChange={setWmsUrl}
+          onWmsLoadLayers={handleLoadWmsLayers}
+          onWmsLayerChange={setWmsSelectedLayer}
         />
+
 
         {showAglPrompt && (
           <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/50">
@@ -959,39 +990,48 @@ const Index = () => {
 
 
 
-        {/* Coordinates panel */}
+        {/* Coordinates panel (przeciągalne, zmniejszone) */}
         {clickedCoords && (() => {
           const coords = formatCoordinates(clickedCoords.lat, clickedCoords.lng, coordSystem);
           return (
             <div
-              className="absolute bottom-24 left-4 z-[1600] rounded-lg border bg-card/95 px-3 py-2 shadow-lg backdrop-blur text-xs text-foreground md:bottom-4"
+              data-coord-panel
+              className={`z-[1600] w-[168px] rounded-lg border bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur text-[10px] text-foreground ${coordPos ? "fixed" : "absolute bottom-24 left-4 md:bottom-4"}`}
+              style={coordPos ? { left: coordPos.x, top: coordPos.y } : undefined}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-1 mb-1">
+                <button
+                  onPointerDown={startCoordDrag}
+                  title="Przeciągnij okno"
+                  className="cursor-move touch-none text-muted-foreground hover:text-foreground"
+                >
+                  <GripVertical className="h-3.5 w-3.5" />
+                </button>
                 <Select value={coordSystem} onValueChange={(v) => setCoordSystem(v as CoordinateSystem)}>
-                  <SelectTrigger className="h-6 w-[130px] text-xs border-muted"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-5 flex-1 text-[10px] border-muted px-1.5"><SelectValue /></SelectTrigger>
                   <SelectContent className="z-[2000]">
                     {COORDINATE_SYSTEMS.map((cs) => (<SelectItem key={cs.value} value={cs.value} className="text-xs">{cs.label}</SelectItem>))}
                   </SelectContent>
                 </Select>
-                <button onClick={() => setClickedCoords(null)} className="text-muted-foreground hover:text-foreground ml-1">✕</button>
+                <button onClick={() => setClickedCoords(null)} className="text-muted-foreground hover:text-foreground">✕</button>
               </div>
-              <div className="font-mono leading-relaxed">
+              <div className="font-mono leading-snug">
                 <div>{coords.line1}</div>
                 <div>{coords.line2}</div>
                 {clickedPhotoAltitude !== null && (
-                  <div className="mt-1 pt-1 border-t text-[11px] text-primary">
-                    Wys. GPS zdjęcia: {clickedPhotoAltitude.toFixed(1)} m n.p.m.
+                  <div className="mt-1 pt-1 border-t text-[10px] text-primary">
+                    Wys. GPS: {clickedPhotoAltitude.toFixed(1)} m
                   </div>
                 )}
                 {clickedTerrainHeight && (
-                  <div className="mt-1 pt-1 border-t text-[11px] text-muted-foreground">
-                    Teren DEM: {clickedTerrainHeight.loading ? "pobieram…" : clickedTerrainHeight.value !== null ? `${clickedTerrainHeight.value.toFixed(1)} m n.p.m.` : "brak danych"}
+                  <div className="mt-1 pt-1 border-t text-[10px] text-muted-foreground">
+                    Teren DEM: {clickedTerrainHeight.loading ? "…" : clickedTerrainHeight.value !== null ? `${clickedTerrainHeight.value.toFixed(1)} m` : "brak"}
                   </div>
                 )}
                 {wmsPixelInfo && (
-                  <div className="mt-1 pt-1 border-t text-[11px] text-primary break-all">
+                  <div className="mt-1 pt-1 border-t text-[10px] text-primary break-all">
                     <span className="text-muted-foreground">{wmsPixelInfo.layer}:</span> {wmsPixelInfo.info}
                   </div>
                 )}
@@ -999,6 +1039,7 @@ const Index = () => {
             </div>
           );
         })()}
+
 
         {/* Attributes panel for selected drawn feature */}
         {selectedFeatureData && (
@@ -1058,7 +1099,7 @@ const Index = () => {
       {isToolsOpen && (
         <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsToolsOpen(false)} />
       )}
-      <div className={`fixed inset-x-0 bottom-0 z-[1200] rounded-t-2xl bg-background shadow-2xl transition-transform duration-300 md:relative md:inset-auto md:right-0 md:top-0 md:h-full md:w-72 md:translate-y-0 md:rounded-none md:shadow-none md:z-auto ${isToolsOpen ? "translate-y-0" : "translate-y-full md:translate-y-0"}`}>
+      <div className={`fixed left-[30%] right-0 bottom-0 z-[1200] max-h-[75dvh] overflow-y-auto rounded-tl-2xl bg-background shadow-2xl transition-transform duration-300 md:relative md:inset-auto md:left-auto md:right-0 md:top-0 md:h-full md:max-h-none md:w-72 md:translate-y-0 md:overflow-visible md:rounded-none md:shadow-none md:z-auto ${isToolsOpen ? "translate-y-0" : "translate-y-full md:translate-y-0"}`}>
         <ToolsPanel
           drawingLayers={drawingLayers}
           activeDrawLayerId={activeDrawLayerId}
