@@ -110,6 +110,8 @@ const MapView = ({
   const drawingLayersRef = useRef(drawingLayers);
   const kmlLayersRef = useRef(kmlLayers);
   const drawModeRef = useRef(drawMode);
+  const onMoveFeatureVertexRef = useRef(onMoveFeatureVertex);
+  const onFeatureClickRef = useRef(onFeatureClick);
 
   // Przyciąganie (snap) rysowanego punktu do istniejących obiektów w promieniu ~15 px.
   const snapForDrawing = (latlng: L.LatLng, excludeId?: string): L.LatLng => {
