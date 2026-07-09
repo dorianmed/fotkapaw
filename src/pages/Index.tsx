@@ -29,6 +29,18 @@ import { Label } from "@/components/ui/label";
 
 const LAYER_COLORS = { point: "#ef4444", line: "#3b82f6", polygon: "#22c55e" } as const;
 
+// Czy odcinki AB i CD się przecinają (do kontroli topologii poligonów/linii).
+const segmentsIntersect = (
+  a: [number, number], b: [number, number], c: [number, number], d: [number, number]
+): boolean => {
+  const ccw = (p: [number, number], q: [number, number], r: [number, number]) =>
+    (r[0] - p[0]) * (q[1] - p[1]) - (q[0] - p[0]) * (r[1] - p[1]);
+  const d1 = ccw(c, d, a), d2 = ccw(c, d, b), d3 = ccw(a, b, c), d4 = ccw(a, b, d);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+};
+const samePoint = (a: [number, number], b: [number, number]) =>
+  Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [photos, setPhotos] = useState<PhotoPoint[]>([]);
@@ -487,6 +499,24 @@ const Index = () => {
   const handleRenameDrawLayer = useCallback((id: string, name: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, name } : l)), []);
   const handleChangeDrawLayerColor = useCallback((id: string, color: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, color } : l)), []);
 
+  // Aktualizacja typu warstwy (z automatycznym kolorem) – używane w formularzu „Dodaj obiekt”.
+  const handleSetDrawLayerType = useCallback((id: string, type: "point" | "line" | "polygon") => {
+    setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, type, color: LAYER_COLORS[type], features: [] } : l));
+    setDrawingPoints([]);
+  }, []);
+  const handleUpdateDrawLayer = useCallback((id: string, patch: Partial<DrawingLayer>) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, ...patch } : l));
+  }, []);
+
+  // Przesunięcie wierzchołka istniejącego obiektu (edycja przez przeciąganie).
+  const handleMoveFeatureVertex = useCallback((layerId: string, featureId: string, index: number, lat: number, lng: number) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : {
+      ...l, features: l.features.map((f) => f.id !== featureId ? f : {
+        ...f, coordinates: f.coordinates.map((c, i) => i === index ? [lat, lng] as [number, number] : c),
+      }),
+    }));
+  }, []);
+
   const finalizeDrawingNow = useCallback(() => {
     const layer = activeDrawLayer;
     if (!layer) return;
@@ -498,6 +528,16 @@ const Index = () => {
       }
       const minPts = layer.type === "line" ? 2 : 3;
       if (cleaned.length < minPts) return [];
+      // Topologia poligonu: krawędź zamykająca nie może przecinać pozostałych.
+      if (layer.type === "polygon" && cleaned.length >= 4) {
+        const first = cleaned[0], last = cleaned[cleaned.length - 1];
+        for (let i = 1; i < cleaned.length - 2; i++) {
+          if (segmentsIntersect(last, first, cleaned[i], cleaned[i + 1])) {
+            toast.warning("Poligon samoprzecinający się — popraw wierzchołki");
+            return points;
+          }
+        }
+      }
       const baseName = layer.type === "line" ? "Linia" : "Poligon";
       setDrawingLayers((prev) => prev.map((l) => l.id !== layer.id ? l : {
         ...l, features: [...l.features, {
@@ -518,6 +558,8 @@ const Index = () => {
       }));
     } else {
       setDrawingPoints((prev) => {
+        const newPt: [number, number] = [lat, lng];
+        // Domknięcie poligonu przez klik w pierwszy wierzchołek.
         if (activeDrawLayer.type === "polygon" && prev.length >= 3) {
           const [flat, flng] = prev[0];
           const dLat = (flat - lat) * 111000;
@@ -527,7 +569,22 @@ const Index = () => {
             return prev;
           }
         }
-        return [...prev, [lat, lng]];
+        // Topologia: bez powielonych wierzchołków.
+        if (prev.some((q) => samePoint(q, newPt))) {
+          toast.warning("Ten wierzchołek już istnieje");
+          return prev;
+        }
+        // Topologia: nowa krawędź nie może przecinać wcześniejszych (brak samoprzecięć).
+        if (prev.length >= 2) {
+          const last = prev[prev.length - 1];
+          for (let i = 0; i < prev.length - 2; i++) {
+            if (segmentsIntersect(last, newPt, prev[i], prev[i + 1])) {
+              toast.warning("Krawędź nie może przecinać obiektu");
+              return prev;
+            }
+          }
+        }
+        return [...prev, newPt];
       });
     }
   }, [activeDrawLayer, finalizeDrawingNow]);
@@ -878,7 +935,7 @@ const Index = () => {
 
         {/* Sterowanie rysowaniem na mapie (widoczne zwłaszcza na telefonie) */}
         {activeDrawLayerId && (
-          <div className="absolute bottom-24 left-1/2 z-[1300] flex -translate-x-1/2 gap-2 md:hidden">
+          <div className="absolute bottom-40 right-4 z-[1300] flex flex-col items-end gap-2 md:hidden">
             {drawMode !== "point" && drawingPoints.length > 0 && (
               <Button size="sm" className="shadow-lg" onClick={finalizeDrawingNow}
                 disabled={drawingPoints.length < (drawMode === "line" ? 2 : 3)}>
@@ -923,6 +980,7 @@ const Index = () => {
           drawMode={drawMode}
           selectedFeatureId={selectedFeature?.featureId ?? null}
           onFeatureClick={handleSelectFeature}
+          onMoveFeatureVertex={handleMoveFeatureVertex}
           onWmsPixelInfo={(layer, info) => setWmsPixelInfo({ layer, info })}
           selectMode={selectMode}
           selectedFeatureRefs={selectedFeatureRefs}
@@ -996,7 +1054,7 @@ const Index = () => {
           return (
             <div
               data-coord-panel
-              className={`z-[1600] w-[168px] rounded-lg border bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur text-[10px] text-foreground ${coordPos ? "fixed" : "absolute bottom-24 left-4 md:bottom-4"}`}
+              className={`z-[1600] w-[100px] rounded-lg border bg-card/95 px-1.5 py-1 shadow-lg backdrop-blur text-[9px] text-foreground ${coordPos ? "fixed" : "absolute bottom-24 left-4 md:bottom-4"}`}
               style={coordPos ? { left: coordPos.x, top: coordPos.y } : undefined}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
@@ -1043,7 +1101,7 @@ const Index = () => {
 
         {/* Attributes panel for selected drawn feature */}
         {selectedFeatureData && (
-          <div className="absolute left-2 right-2 bottom-2 z-[1400] max-h-[55vh] overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs md:left-auto md:right-4 md:top-4 md:bottom-auto md:w-72">
+          <div className="absolute left-2 right-2 bottom-2 z-[1400] max-h-[55vh] overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs md:left-auto md:right-4 md:top-4 md:bottom-auto md:w-40">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-foreground">Atrybuty obiektu</h3>
               <button onClick={() => setSelectedFeature(null)} title="Zamknij"
@@ -1099,7 +1157,7 @@ const Index = () => {
       {isToolsOpen && (
         <div className="fixed inset-0 z-[1100] bg-black/40 md:hidden" onClick={() => setIsToolsOpen(false)} />
       )}
-      <div className={`fixed left-[30%] right-0 bottom-0 z-[1200] max-h-[75dvh] overflow-y-auto rounded-tl-2xl bg-background shadow-2xl transition-transform duration-300 md:relative md:inset-auto md:left-auto md:right-0 md:top-0 md:h-full md:max-h-none md:w-72 md:translate-y-0 md:overflow-visible md:rounded-none md:shadow-none md:z-auto ${isToolsOpen ? "translate-y-0" : "translate-y-full md:translate-y-0"}`}>
+      <div className={`fixed left-[44%] right-0 bottom-0 z-[1200] max-h-[75dvh] overflow-y-auto rounded-tl-2xl bg-background shadow-2xl transition-transform duration-300 md:relative md:inset-auto md:left-auto md:right-0 md:top-0 md:h-full md:max-h-none md:w-72 md:translate-y-0 md:overflow-visible md:rounded-none md:shadow-none md:z-auto ${isToolsOpen ? "translate-y-0" : "translate-y-full md:translate-y-0"}`}>
         <ToolsPanel
           drawingLayers={drawingLayers}
           activeDrawLayerId={activeDrawLayerId}
@@ -1113,6 +1171,8 @@ const Index = () => {
           onRemoveDrawLayer={handleRemoveDrawLayer}
           onRenameDrawLayer={handleRenameDrawLayer}
           onChangeDrawLayerColor={handleChangeDrawLayerColor}
+          onSetDrawLayerType={handleSetDrawLayerType}
+          onUpdateDrawLayer={handleUpdateDrawLayer}
           onSelectFeature={handleSelectFeature}
           onFinishDrawing={finalizeDrawingNow}
           onAddFeatureToLayer={handleAddFeatureToLayer}

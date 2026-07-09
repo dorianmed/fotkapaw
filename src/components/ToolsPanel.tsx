@@ -35,6 +35,8 @@ interface ToolsPanelProps {
   onRemoveDrawLayer: (id: string) => void;
   onRenameDrawLayer: (id: string, name: string) => void;
   onChangeDrawLayerColor: (id: string, color: string) => void;
+  onSetDrawLayerType: (id: string, type: GeomType) => void;
+  onUpdateDrawLayer: (id: string, patch: Partial<DrawingLayer>) => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
   onFinishDrawing: () => void;
   onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => void;
@@ -65,7 +67,8 @@ const ToolsPanel = ({
   drawingLayers, activeDrawLayerId, drawMode, drawingInProgressCount,
   selectedFeature, selectedFeatures,
   onCreateLayer, onSetActiveDrawLayer, onToggleDrawLayer, onRemoveDrawLayer,
-  onRenameDrawLayer, onChangeDrawLayerColor, onSelectFeature, onFinishDrawing,
+  onRenameDrawLayer, onChangeDrawLayerColor, onSetDrawLayerType, onUpdateDrawLayer,
+  onSelectFeature, onFinishDrawing,
   onAddFeatureToLayer, onExportLayers,
   defaultCrs,
   jobs, activeJobId, onCreateJob, onSelectJob, onSaveActiveJob, onDeleteJob,
@@ -73,16 +76,38 @@ const ToolsPanel = ({
 }: ToolsPanelProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
-  // ── Drawing: nowa warstwa ──
+  // ── Drawing: nowa warstwa (tworzona od razu – rysowanie po kliknięciu na mapie) ──
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<GeomType>("point");
   const [newCrs, setNewCrs] = useState<CoordinateSystem>(defaultCrs);
+  const [draftId, setDraftId] = useState<string | null>(null);
 
-  const addLayer = () => {
+  // Otwórz formularz i od razu utwórz aktywną warstwę roboczą.
+  const openAddLayer = () => {
+    if (showAddLayer) { setShowAddLayer(false); return; }
     const name = newName.trim() || typeLabel(newType);
-    onCreateLayer({ name, type: newType, crs: newCrs });
+    const id = onCreateLayer({ name, type: newType, crs: newCrs });
+    setDraftId(id);
+    setShowAddLayer(true);
+  };
+
+  // Zmiany w formularzu aktualizują aktywną warstwę na żywo.
+  const changeDraftName = (v: string) => {
+    setNewName(v);
+    if (draftId) onUpdateDrawLayer(draftId, { name: v.trim() || typeLabel(newType) });
+  };
+  const changeDraftType = (t: GeomType) => {
+    setNewType(t);
+    if (draftId) onSetDrawLayerType(draftId, t);
+  };
+  const changeDraftCrs = (c: CoordinateSystem) => {
+    setNewCrs(c);
+    if (draftId) onUpdateDrawLayer(draftId, { crs: c });
+  };
+  const finishAddLayer = () => {
     setNewName("");
+    setDraftId(null);
     setShowAddLayer(false);
   };
 
@@ -220,17 +245,17 @@ const ToolsPanel = ({
 
         {/* ───────── Rysowanie ───────── */}
         <TabsContent value="draw" className="space-y-2 pt-3">
-          <Button size="sm" className="w-full" onClick={() => setShowAddLayer((v) => !v)}>
+          <Button size="sm" className="w-full" onClick={openAddLayer}>
             <Plus className="mr-1 h-3 w-3" /> Dodaj obiekt
           </Button>
 
           {showAddLayer && (
             <div className="space-y-2 rounded-md border p-2">
               <Input className="h-8 text-xs" placeholder="Nazwa obiektu (np. drzewo)" value={newName}
-                onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLayer()} autoFocus />
+                onChange={(e) => changeDraftName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && finishAddLayer()} autoFocus />
               <div className="grid grid-cols-3 gap-1">
                 {(["point", "line", "polygon"] as GeomType[]).map((t) => (
-                  <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setNewType(t)}>
+                  <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => changeDraftType(t)}>
                     {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
                   </Button>
                 ))}
@@ -238,11 +263,14 @@ const ToolsPanel = ({
               <div className="flex items-center gap-2">
                 <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
                 <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
-                  value={newCrs} onChange={(e) => setNewCrs(e.target.value as CoordinateSystem)}>
+                  value={newCrs} onChange={(e) => changeDraftCrs(e.target.value as CoordinateSystem)}>
                   {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              <Button size="sm" className="w-full" onClick={addLayer}><Check className="mr-1 h-3 w-3" /> Utwórz</Button>
+              <p className="text-[10px] text-muted-foreground leading-tight">
+                Klikaj na mapie, aby rysować. Warstwa jest już aktywna.
+              </p>
+              <Button size="sm" className="w-full" onClick={finishAddLayer}><Check className="mr-1 h-3 w-3" /> Gotowe</Button>
             </div>
           )}
 
