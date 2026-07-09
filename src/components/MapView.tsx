@@ -402,6 +402,8 @@ const MapView = ({
     drawingLayersRef.current = drawingLayers;
     kmlLayersRef.current = kmlLayers;
     drawModeRef.current = drawMode;
+    onMoveFeatureVertexRef.current = onMoveFeatureVertex;
+    onFeatureClickRef.current = onFeatureClick;
     // Build snap targets: photo centers/corners + drawing layer vertices + wektory (KML/TXT/DXF/SHP/GML)
     const photoTargets = createPhotoSnapTargets(photos);
     const drawTargets = drawingLayers.flatMap((dl) =>
