@@ -1054,7 +1054,7 @@ const Index = () => {
           return (
             <div
               data-coord-panel
-              className={`z-[1600] w-[168px] rounded-lg border bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur text-[10px] text-foreground ${coordPos ? "fixed" : "absolute bottom-24 left-4 md:bottom-4"}`}
+              className={`z-[1600] w-[100px] rounded-lg border bg-card/95 px-1.5 py-1 shadow-lg backdrop-blur text-[9px] text-foreground ${coordPos ? "fixed" : "absolute bottom-24 left-4 md:bottom-4"}`}
               style={coordPos ? { left: coordPos.x, top: coordPos.y } : undefined}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
