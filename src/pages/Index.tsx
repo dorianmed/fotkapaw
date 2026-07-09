@@ -530,6 +530,8 @@ const Index = () => {
       }));
     } else {
       setDrawingPoints((prev) => {
+        const newPt: [number, number] = [lat, lng];
+        // Domknięcie poligonu przez klik w pierwszy wierzchołek.
         if (activeDrawLayer.type === "polygon" && prev.length >= 3) {
           const [flat, flng] = prev[0];
           const dLat = (flat - lat) * 111000;
@@ -539,7 +541,22 @@ const Index = () => {
             return prev;
           }
         }
-        return [...prev, [lat, lng]];
+        // Topologia: bez powielonych wierzchołków.
+        if (prev.some((q) => samePoint(q, newPt))) {
+          toast.warning("Ten wierzchołek już istnieje");
+          return prev;
+        }
+        // Topologia: nowa krawędź nie może przecinać wcześniejszych (brak samoprzecięć).
+        if (prev.length >= 2) {
+          const last = prev[prev.length - 1];
+          for (let i = 0; i < prev.length - 2; i++) {
+            if (segmentsIntersect(last, newPt, prev[i], prev[i + 1])) {
+              toast.warning("Krawędź nie może przecinać obiektu");
+              return prev;
+            }
+          }
+        }
+        return [...prev, newPt];
       });
     }
   }, [activeDrawLayer, finalizeDrawingNow]);
