@@ -110,13 +110,14 @@ const MapView = ({
   const drawModeRef = useRef(drawMode);
 
   // Przyciąganie (snap) rysowanego punktu do istniejących obiektów w promieniu ~15 px.
-  const snapForDrawing = (latlng: L.LatLng): L.LatLng => {
+  const snapForDrawing = (latlng: L.LatLng, excludeId?: string): L.LatLng => {
     const map = mapRef.current;
     if (!map) return latlng;
     const p = map.latLngToContainerPoint(latlng);
     let best: { lat: number; lng: number } | null = null;
     let bestD = Infinity;
     for (const t of snapTargetsRef.current) {
+      if (excludeId && t.id === excludeId) continue;
       const tp = map.latLngToContainerPoint(L.latLng(t.lat, t.lng));
       const d = p.distanceTo(tp);
       if (d < bestD) { bestD = d; best = t; }
