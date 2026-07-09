@@ -1101,7 +1101,7 @@ const Index = () => {
 
         {/* Attributes panel for selected drawn feature */}
         {selectedFeatureData && (
-          <div className="absolute left-2 right-2 bottom-2 z-[1400] max-h-[55vh] overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs md:left-auto md:right-4 md:top-4 md:bottom-auto md:w-72">
+          <div className="absolute left-2 right-2 bottom-2 z-[1400] max-h-[55vh] overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs md:left-auto md:right-4 md:top-4 md:bottom-auto md:w-40">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-foreground">Atrybuty obiektu</h3>
               <button onClick={() => setSelectedFeature(null)} title="Zamknij"
