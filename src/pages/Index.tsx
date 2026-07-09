@@ -29,6 +29,18 @@ import { Label } from "@/components/ui/label";
 
 const LAYER_COLORS = { point: "#ef4444", line: "#3b82f6", polygon: "#22c55e" } as const;
 
+// Czy odcinki AB i CD się przecinają (do kontroli topologii poligonów/linii).
+const segmentsIntersect = (
+  a: [number, number], b: [number, number], c: [number, number], d: [number, number]
+): boolean => {
+  const ccw = (p: [number, number], q: [number, number], r: [number, number]) =>
+    (r[0] - p[0]) * (q[1] - p[1]) - (q[0] - p[0]) * (r[1] - p[1]);
+  const d1 = ccw(c, d, a), d2 = ccw(c, d, b), d3 = ccw(a, b, c), d4 = ccw(a, b, d);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+};
+const samePoint = (a: [number, number], b: [number, number]) =>
+  Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+
 const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [photos, setPhotos] = useState<PhotoPoint[]>([]);
