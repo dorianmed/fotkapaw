@@ -35,6 +35,8 @@ interface ToolsPanelProps {
   onRemoveDrawLayer: (id: string) => void;
   onRenameDrawLayer: (id: string, name: string) => void;
   onChangeDrawLayerColor: (id: string, color: string) => void;
+  onSetDrawLayerType: (id: string, type: GeomType) => void;
+  onUpdateDrawLayer: (id: string, patch: Partial<DrawingLayer>) => void;
   onSelectFeature: (layerId: string, featureId: string) => void;
   onFinishDrawing: () => void;
   onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => void;
