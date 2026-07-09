@@ -669,6 +669,12 @@ const MapView = ({
         geoLayer.on("click", (e: L.LeafletMouseEvent) => {
           if (measureModeRef.current !== "none") return;
           L.DomEvent.stop(e);
+          // Podczas rysowania przyciągaj nowy wierzchołek do zaimportowanego obiektu.
+          if (drawModeRef.current !== "none" && !selectModeRef.current) {
+            const snapped = snapForDrawing(e.latlng);
+            onMapClickRef.current?.(snapped.lat, snapped.lng);
+            return;
+          }
           if (selectModeRef.current) {
             onToggleSelectFeatureRef.current?.(layer.id, String(idx));
             return;
