@@ -980,6 +980,7 @@ const Index = () => {
           drawMode={drawMode}
           selectedFeatureId={selectedFeature?.featureId ?? null}
           onFeatureClick={handleSelectFeature}
+          onMoveFeatureVertex={handleMoveFeatureVertex}
           onWmsPixelInfo={(layer, info) => setWmsPixelInfo({ layer, info })}
           selectMode={selectMode}
           selectedFeatureRefs={selectedFeatureRefs}
