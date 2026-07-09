@@ -510,6 +510,16 @@ const Index = () => {
       }
       const minPts = layer.type === "line" ? 2 : 3;
       if (cleaned.length < minPts) return [];
+      // Topologia poligonu: krawędź zamykająca nie może przecinać pozostałych.
+      if (layer.type === "polygon" && cleaned.length >= 4) {
+        const first = cleaned[0], last = cleaned[cleaned.length - 1];
+        for (let i = 1; i < cleaned.length - 2; i++) {
+          if (segmentsIntersect(last, first, cleaned[i], cleaned[i + 1])) {
+            toast.warning("Poligon samoprzecinający się — popraw wierzchołki");
+            return points;
+          }
+        }
+      }
       const baseName = layer.type === "line" ? "Linia" : "Poligon";
       setDrawingLayers((prev) => prev.map((l) => l.id !== layer.id ? l : {
         ...l, features: [...l.features, {
