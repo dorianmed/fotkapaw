@@ -76,16 +76,38 @@ const ToolsPanel = ({
 }: ToolsPanelProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
 
-  // ── Drawing: nowa warstwa ──
+  // ── Drawing: nowa warstwa (tworzona od razu – rysowanie po kliknięciu na mapie) ──
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<GeomType>("point");
   const [newCrs, setNewCrs] = useState<CoordinateSystem>(defaultCrs);
+  const [draftId, setDraftId] = useState<string | null>(null);
 
-  const addLayer = () => {
+  // Otwórz formularz i od razu utwórz aktywną warstwę roboczą.
+  const openAddLayer = () => {
+    if (showAddLayer) { setShowAddLayer(false); return; }
     const name = newName.trim() || typeLabel(newType);
-    onCreateLayer({ name, type: newType, crs: newCrs });
+    const id = onCreateLayer({ name, type: newType, crs: newCrs });
+    setDraftId(id);
+    setShowAddLayer(true);
+  };
+
+  // Zmiany w formularzu aktualizują aktywną warstwę na żywo.
+  const changeDraftName = (v: string) => {
+    setNewName(v);
+    if (draftId) onUpdateDrawLayer(draftId, { name: v.trim() || typeLabel(newType) });
+  };
+  const changeDraftType = (t: GeomType) => {
+    setNewType(t);
+    if (draftId) onSetDrawLayerType(draftId, t);
+  };
+  const changeDraftCrs = (c: CoordinateSystem) => {
+    setNewCrs(c);
+    if (draftId) onUpdateDrawLayer(draftId, { crs: c });
+  };
+  const finishAddLayer = () => {
     setNewName("");
+    setDraftId(null);
     setShowAddLayer(false);
   };
 
