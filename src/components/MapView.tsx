@@ -79,6 +79,7 @@ const MapView = ({
   drawMode = "none",
   selectedFeatureId = null,
   onFeatureClick,
+  onMoveFeatureVertex,
   onWmsPixelInfo,
   selectMode = false,
   selectedFeatureRefs = [],
