@@ -935,7 +935,7 @@ const Index = () => {
 
         {/* Sterowanie rysowaniem na mapie (widoczne zwłaszcza na telefonie) */}
         {activeDrawLayerId && (
-          <div className="absolute bottom-24 left-1/2 z-[1300] flex -translate-x-1/2 gap-2 md:hidden">
+          <div className="absolute bottom-40 right-4 z-[1300] flex flex-col items-end gap-2 md:hidden">
             {drawMode !== "point" && drawingPoints.length > 0 && (
               <Button size="sm" className="shadow-lg" onClick={finalizeDrawingNow}
                 disabled={drawingPoints.length < (drawMode === "line" ? 2 : 3)}>
