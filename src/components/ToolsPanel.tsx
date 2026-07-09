@@ -245,17 +245,17 @@ const ToolsPanel = ({
 
         {/* ───────── Rysowanie ───────── */}
         <TabsContent value="draw" className="space-y-2 pt-3">
-          <Button size="sm" className="w-full" onClick={() => setShowAddLayer((v) => !v)}>
+          <Button size="sm" className="w-full" onClick={openAddLayer}>
             <Plus className="mr-1 h-3 w-3" /> Dodaj obiekt
           </Button>
 
           {showAddLayer && (
             <div className="space-y-2 rounded-md border p-2">
               <Input className="h-8 text-xs" placeholder="Nazwa obiektu (np. drzewo)" value={newName}
-                onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLayer()} autoFocus />
+                onChange={(e) => changeDraftName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && finishAddLayer()} autoFocus />
               <div className="grid grid-cols-3 gap-1">
                 {(["point", "line", "polygon"] as GeomType[]).map((t) => (
-                  <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setNewType(t)}>
+                  <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => changeDraftType(t)}>
                     {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
                   </Button>
                 ))}
@@ -263,11 +263,14 @@ const ToolsPanel = ({
               <div className="flex items-center gap-2">
                 <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ:</Label>
                 <select className="flex-1 h-7 text-xs rounded border bg-background px-1"
-                  value={newCrs} onChange={(e) => setNewCrs(e.target.value as CoordinateSystem)}>
+                  value={newCrs} onChange={(e) => changeDraftCrs(e.target.value as CoordinateSystem)}>
                   {CRS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              <Button size="sm" className="w-full" onClick={addLayer}><Check className="mr-1 h-3 w-3" /> Utwórz</Button>
+              <p className="text-[10px] text-muted-foreground leading-tight">
+                Klikaj na mapie, aby rysować. Warstwa jest już aktywna.
+              </p>
+              <Button size="sm" className="w-full" onClick={finishAddLayer}><Check className="mr-1 h-3 w-3" /> Gotowe</Button>
             </div>
           )}
 
