@@ -499,6 +499,24 @@ const Index = () => {
   const handleRenameDrawLayer = useCallback((id: string, name: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, name } : l)), []);
   const handleChangeDrawLayerColor = useCallback((id: string, color: string) => setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, color } : l)), []);
 
+  // Aktualizacja typu warstwy (z automatycznym kolorem) – używane w formularzu „Dodaj obiekt”.
+  const handleSetDrawLayerType = useCallback((id: string, type: "point" | "line" | "polygon") => {
+    setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, type, color: LAYER_COLORS[type], features: [] } : l));
+    setDrawingPoints([]);
+  }, []);
+  const handleUpdateDrawLayer = useCallback((id: string, patch: Partial<DrawingLayer>) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id === id ? { ...l, ...patch } : l));
+  }, []);
+
+  // Przesunięcie wierzchołka istniejącego obiektu (edycja przez przeciąganie).
+  const handleMoveFeatureVertex = useCallback((layerId: string, featureId: string, index: number, lat: number, lng: number) => {
+    setDrawingLayers((prev) => prev.map((l) => l.id !== layerId ? l : {
+      ...l, features: l.features.map((f) => f.id !== featureId ? f : {
+        ...f, coordinates: f.coordinates.map((c, i) => i === index ? [lat, lng] as [number, number] : c),
+      }),
+    }));
+  }, []);
+
   const finalizeDrawingNow = useCallback(() => {
     const layer = activeDrawLayer;
     if (!layer) return;
