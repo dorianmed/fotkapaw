@@ -1171,6 +1171,8 @@ const Index = () => {
           onRemoveDrawLayer={handleRemoveDrawLayer}
           onRenameDrawLayer={handleRenameDrawLayer}
           onChangeDrawLayerColor={handleChangeDrawLayerColor}
+          onSetDrawLayerType={handleSetDrawLayerType}
+          onUpdateDrawLayer={handleUpdateDrawLayer}
           onSelectFeature={handleSelectFeature}
           onFinishDrawing={finalizeDrawingNow}
           onAddFeatureToLayer={handleAddFeatureToLayer}
