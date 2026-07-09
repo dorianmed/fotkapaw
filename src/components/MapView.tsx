@@ -717,6 +717,23 @@ const MapView = ({
     layer.clearLayers();
 
     const selectedRefSet = new Set(selectedFeatureRefs);
+
+    // Uchwyt (marker) wierzchołka – przeciągalny, do edycji istniejących obiektów.
+    const addVertexHandles = (dl: DrawingLayer, f: typeof dl.features[number], color: string) => {
+      if (selectModeRef.current) return;
+      f.coordinates.forEach(([lat, lng], vi) => {
+        const icon = L.divIcon({
+          html: `<div style="width:12px;height:12px;background:#fff;border:2px solid ${color};border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,.5);cursor:grab"></div>`,
+          iconSize: [12, 12], iconAnchor: [6, 6], className: "",
+        });
+        const vm = L.marker([lat, lng], { icon, draggable: true, zIndexOffset: 2000 }).addTo(layer);
+        vm.on("dragend", () => {
+          const snapped = snapForDrawing(vm.getLatLng(), `${dl.id}-${f.id}-${vi}`);
+          onMoveFeatureVertexRef.current?.(dl.id, f.id, vi, snapped.lat, snapped.lng);
+        });
+      });
+    };
+
     drawingLayers.forEach((dl) => {
       if (!dl.visible) return;
       dl.features.forEach((f) => {
@@ -728,11 +745,17 @@ const MapView = ({
         const handleClick = (e: L.LeafletMouseEvent) => {
           if (measureModeRef.current !== "none") return;
           L.DomEvent.stop(e);
+          // Podczas rysowania klik w obiekt = przyciągnięcie nowego wierzchołka do niego.
+          if (drawModeRef.current !== "none" && !selectModeRef.current) {
+            const snapped = snapForDrawing(e.latlng);
+            onMapClickRef.current?.(snapped.lat, snapped.lng);
+            return;
+          }
           if (selectModeRef.current) {
             onToggleSelectFeatureRef.current?.(dl.id, f.id);
             return;
           }
-          onFeatureClick?.(dl.id, f.id);
+          onFeatureClickRef.current?.(dl.id, f.id);
         };
 
         if (dl.type === "point" && f.coordinates.length > 0) {
@@ -747,11 +770,14 @@ const MapView = ({
             .bindTooltip(tooltip, { direction: "top", offset: [0, -8] })
             .addTo(layer);
           m.on("click", handleClick);
+          // Punkt: gdy zaznaczony, dodaj przeciągalny uchwyt (i tak snapuje przy rysowaniu).
+          if (isSelected) addVertexHandles(dl, f, drawColor);
         } else if (dl.type === "line" && f.coordinates.length >= 2) {
           const m = L.polyline(f.coordinates, { color: drawColor, weight: weight + 1 })
             .bindTooltip(tooltip, { direction: "top" })
             .addTo(layer);
           m.on("click", handleClick);
+          if (isSelected) addVertexHandles(dl, f, drawColor);
         } else if (dl.type === "polygon" && f.coordinates.length >= 3) {
           const m = L.polygon(f.coordinates, {
             color: drawColor,
@@ -772,6 +798,7 @@ const MapView = ({
             }
             handleClick(e);
           });
+          if (isSelected) addVertexHandles(dl, f, drawColor);
         }
       });
     });
