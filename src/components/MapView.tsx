@@ -41,6 +41,7 @@ interface MapViewProps {
   drawMode?: DrawMode;
   selectedFeatureId?: string | null;
   onFeatureClick?: (layerId: string, featureId: string) => void;
+  onMoveFeatureVertex?: (layerId: string, featureId: string, index: number, lat: number, lng: number) => void;
   onWmsPixelInfo?: (layerName: string, info: string) => void;
   selectMode?: boolean;
   selectedFeatureRefs?: string[];
