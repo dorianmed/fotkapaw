@@ -745,13 +745,18 @@ const MapView = ({
 
     const selectedRefSet = new Set(selectedFeatureRefs);
 
-    // Uchwyt (marker) wierzchołka – przeciągalny, do edycji istniejących obiektów.
+    // Uchwyt wierzchołka – strzałka, której grot wskazuje wierzchołek. Ciało
+    // strzałki wisi poniżej, więc łatwo je złapać bez przypadkowego ruszania mapy.
     const addVertexHandles = (dl: DrawingLayer, f: typeof dl.features[number], color: string) => {
       if (selectModeRef.current) return;
       f.coordinates.forEach(([lat, lng], vi) => {
+        // Kropka dokładnie na wierzchołku (dla czytelności pozycji).
+        L.circleMarker([lat, lng], { radius: 3, color: "#fff", fillColor: color, fillOpacity: 1, weight: 2 }).addTo(layer);
         const icon = L.divIcon({
-          html: `<div style="width:12px;height:12px;background:#fff;border:2px solid ${color};border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,.5);cursor:grab"></div>`,
-          iconSize: [12, 12], iconAnchor: [6, 6], className: "",
+          html: `<svg width="26" height="34" viewBox="0 0 26 34" style="cursor:grab;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">
+            <polygon points="13,1 24,15 17,15 17,32 9,32 9,15 2,15" fill="${color}" stroke="#fff" stroke-width="1.6"/>
+          </svg>`,
+          iconSize: [26, 34], iconAnchor: [13, 1], className: "",
         });
         const vm = L.marker([lat, lng], { icon, draggable: true, zIndexOffset: 2000 }).addTo(layer);
         vm.on("dragend", () => {
