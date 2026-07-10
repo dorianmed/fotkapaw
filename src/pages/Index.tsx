@@ -1210,6 +1210,13 @@ const Index = () => {
           onFinishDrawing={finalizeDrawingNow}
           onAddFeatureToLayer={handleAddFeatureToLayer}
           onExportLayers={handleExportLayers}
+          folders={drawingFolders}
+          onAddFolder={handleAddFolder}
+          onRemoveFolder={handleRemoveFolder}
+          onRenameFolder={handleRenameFolder}
+          onToggleFolderCollapse={handleToggleFolderCollapse}
+          onMoveLayerToFolder={handleMoveLayerToFolder}
+          onReorderFolder={handleReorderFolder}
           defaultCrs={defaultCrs}
           jobs={jobs}
           activeJobId={activeJobId}
