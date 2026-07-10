@@ -1,11 +1,13 @@
 import { CoordinateSystem } from "./coordinateUtils";
-import { DrawingLayer } from "@/types/drawing";
+import { DrawingLayer, DrawingFolder } from "@/types/drawing";
 import { KmlLayer } from "@/types/photo";
 
 /** Dane robocze zapisywane w obrębie pojedynczej pracy (JOB). */
 export interface JobSnapshot {
   drawingLayers: DrawingLayer[];
   kmlLayers: KmlLayer[];
+  /** Foldery grupujące warstwy rysowania (opcjonalne). */
+  drawingFolders?: DrawingFolder[];
 }
 
 /** Pojedyncza praca (projekt). Element nadrzędny zarządzania danymi. */
@@ -24,7 +26,7 @@ export interface Job {
 const KEY = "fotkapaw.jobs.v1";
 const FILE_TAG = "fotkapaw-jobs";
 
-const emptySnapshot = (): JobSnapshot => ({ drawingLayers: [], kmlLayers: [] });
+const emptySnapshot = (): JobSnapshot => ({ drawingLayers: [], kmlLayers: [], drawingFolders: [] });
 
 export function loadJobs(): Job[] {
   try {
@@ -88,6 +90,7 @@ export function parseJobsFile(text: string): Job[] {
       data: {
         drawingLayers: Array.isArray(j.data?.drawingLayers) ? j.data.drawingLayers : [],
         kmlLayers: Array.isArray(j.data?.kmlLayers) ? j.data.kmlLayers : [],
+        drawingFolders: Array.isArray(j.data?.drawingFolders) ? j.data.drawingFolders : [],
       },
     }));
 }

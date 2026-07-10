@@ -141,10 +141,27 @@ const MapView = ({
     return out;
   };
 
+  const measureLineRef = useRef<L.Polyline | null>(null);
+  const measurePolyRef = useRef<L.Polygon | null>(null);
+
+  // Aktualizuje geometrię (linia/poligon) oraz podsumowanie bez odtwarzania markerów.
+  const updateMeasureGeometry = () => {
+    const pts = measurementPointsRef.current.map(([lat, lng]) => ({ lat, lng }));
+    if (measureLineRef.current) measureLineRef.current.setLatLngs(measurementPointsRef.current.map(([lat, lng]) => [lat, lng] as [number, number]));
+    if (measurePolyRef.current) measurePolyRef.current.setLatLngs(measurementPointsRef.current.map(([lat, lng]) => [lat, lng] as [number, number]));
+    onMeasurementChange?.({
+      distanceMeters: calcPolylineDistance(pts),
+      areaSquareMeters: measureModeRef.current === "area" ? calcPolygonArea(pts) : 0,
+      pointCount: pts.length,
+    });
+  };
+
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
+    measureLineRef.current = null;
+    measurePolyRef.current = null;
 
     const points = measurementPointsRef.current.map(([lat, lng]) => ({ lat, lng }));
     if (points.length === 0) {
@@ -155,34 +172,41 @@ const MapView = ({
     const primary = getThemeColor("--primary", "hsl(222.2 47.4% 11.2%)");
     const ring = getThemeColor("--ring", "hsl(217.2 91.2% 59.8%)");
 
-    points.forEach((point, index) => {
-      L.circleMarker([point.lat, point.lng], {
-        radius: 5, color: primary, fillColor: ring, fillOpacity: 1, weight: 2,
-      })
-        .bindTooltip(`${index + 1}`, { permanent: true, direction: "top", offset: [0, -8] })
-        .addTo(layer);
-    });
-
-    const measurement: MeasurementSummary = {
-      distanceMeters: calcPolylineDistance(points),
-      areaSquareMeters: measureModeRef.current === "area" ? calcPolygonArea(points) : 0,
-      pointCount: points.length,
-    };
-
     if (points.length >= 2) {
-      L.polyline(points.map((p) => [p.lat, p.lng] as [number, number]), {
+      measureLineRef.current = L.polyline(points.map((p) => [p.lat, p.lng] as [number, number]), {
         color: primary, weight: 3,
         dashArray: measureModeRef.current === "area" ? "6 4" : undefined,
       }).addTo(layer);
     }
 
     if (measureModeRef.current === "area" && points.length >= 3) {
-      L.polygon(points.map((p) => [p.lat, p.lng] as [number, number]), {
+      measurePolyRef.current = L.polygon(points.map((p) => [p.lat, p.lng] as [number, number]), {
         color: primary, fillColor: ring, fillOpacity: 0.18, weight: 2,
       }).addTo(layer);
     }
 
-    onMeasurementChange?.(measurement);
+    // Przeciągalne wierzchołki pomiaru – zmiana pozycji aktualizuje odległość/pole na żywo.
+    points.forEach((point, index) => {
+      const icon = L.divIcon({
+        html: `<div style="width:14px;height:14px;background:${ring};border:2px solid ${primary};border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,.5);cursor:grab"></div>`,
+        iconSize: [14, 14], iconAnchor: [7, 7], className: "",
+      });
+      const m = L.marker([point.lat, point.lng], { icon, draggable: true, zIndexOffset: 3000 })
+        .bindTooltip(`${index + 1}`, { permanent: true, direction: "top", offset: [0, -10] })
+        .addTo(layer);
+      m.on("drag", () => {
+        const ll = m.getLatLng();
+        measurementPointsRef.current[index] = [ll.lat, ll.lng];
+        updateMeasureGeometry();
+      });
+      m.on("dragend", () => {
+        const snapped = snapForDrawing(m.getLatLng());
+        measurementPointsRef.current[index] = [snapped.lat, snapped.lng];
+        redrawMeasurement();
+      });
+    });
+
+    updateMeasureGeometry();
   };
 
   const resetMeasurement = () => {
@@ -197,10 +221,7 @@ const MapView = ({
     const prev = measurementPointsRef.current[measurementPointsRef.current.length - 1];
     if (prev && prev[0] === nextPoint[0] && prev[1] === nextPoint[1]) return true;
 
-    if (measureModeRef.current === "distance" && measurementPointsRef.current.length >= 2) {
-      measurementPointsRef.current = [];
-    }
-
+    // Dystans: budujemy łamaną (wiele odcinków), bez resetu po 2 punktach.
     measurementPointsRef.current = [...measurementPointsRef.current, nextPoint];
     redrawMeasurement();
     return true;
@@ -266,9 +287,15 @@ const MapView = ({
 
     // Ustawienie widoku na lokalizację pracy (JOB).
     const handleSetView = (event: Event) => {
-      const d = (event as CustomEvent).detail as { lat: number; lng: number; zoom?: number };
+      const d = (event as CustomEvent).detail as { lat: number; lng: number; zoom?: number; fracTop?: number };
       if (typeof d?.lat === "number" && typeof d?.lng === "number") {
-        map.setView([d.lat, d.lng], d.zoom ?? map.getZoom());
+        map.setView([d.lat, d.lng], d.zoom ?? map.getZoom(), { animate: false });
+        // Umieść punkt na zadanej wysokości ekranu (np. 3/4 od dołu = 0.25 od góry),
+        // by nie zasłaniało go dolne menu na telefonie.
+        if (typeof d.fracTop === "number") {
+          const size = map.getSize();
+          map.panBy([0, size.y * (0.5 - d.fracTop)], { animate: false });
+        }
       }
     };
 
@@ -724,13 +751,18 @@ const MapView = ({
 
     const selectedRefSet = new Set(selectedFeatureRefs);
 
-    // Uchwyt (marker) wierzchołka – przeciągalny, do edycji istniejących obiektów.
+    // Uchwyt wierzchołka – strzałka, której grot wskazuje wierzchołek. Ciało
+    // strzałki wisi poniżej, więc łatwo je złapać bez przypadkowego ruszania mapy.
     const addVertexHandles = (dl: DrawingLayer, f: typeof dl.features[number], color: string) => {
       if (selectModeRef.current) return;
       f.coordinates.forEach(([lat, lng], vi) => {
+        // Kropka dokładnie na wierzchołku (dla czytelności pozycji).
+        L.circleMarker([lat, lng], { radius: 3, color: "#fff", fillColor: color, fillOpacity: 1, weight: 2 }).addTo(layer);
         const icon = L.divIcon({
-          html: `<div style="width:12px;height:12px;background:#fff;border:2px solid ${color};border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,.5);cursor:grab"></div>`,
-          iconSize: [12, 12], iconAnchor: [6, 6], className: "",
+          html: `<svg width="26" height="34" viewBox="0 0 26 34" style="cursor:grab;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">
+            <polygon points="13,1 24,15 17,15 17,32 9,32 9,15 2,15" fill="${color}" stroke="#fff" stroke-width="1.6"/>
+          </svg>`,
+          iconSize: [26, 34], iconAnchor: [13, 1], className: "",
         });
         const vm = L.marker([lat, lng], { icon, draggable: true, zIndexOffset: 2000 }).addTo(layer);
         vm.on("dragend", () => {
@@ -782,7 +814,16 @@ const MapView = ({
           const m = L.polyline(f.coordinates, { color: drawColor, weight: weight + 1 })
             .bindTooltip(tooltip, { direction: "top" })
             .addTo(layer);
-          m.on("click", handleClick);
+          m.on("click", (e) => {
+            // W trybie pomiaru: klik w linię pokazuje jej długość.
+            if (measureModeRef.current !== "none") {
+              const pts = f.coordinates.map(([lat, lng]) => ({ lat, lng }));
+              onMeasurementChange?.({ distanceMeters: calcPolylineDistance(pts), areaSquareMeters: 0, pointCount: pts.length });
+              L.DomEvent.stop(e);
+              return;
+            }
+            handleClick(e);
+          });
           if (isSelected) addVertexHandles(dl, f, drawColor);
         } else if (dl.type === "polygon" && f.coordinates.length >= 3) {
           const m = L.polygon(f.coordinates, {

@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
-import { DrawingLayer } from "@/types/drawing";
+import { DrawingLayer, DrawingFolder } from "@/types/drawing";
 import { importDxf, importShp, importTxtAdvanced, importGml, exportDxf, exportGeoJson, exportTxt as exportTxtFile, saveBlob, TxtImportOptions } from "@/lib/vectorImportExport";
 import { fetchTerrainHeight, fetchTerrainHeights } from "@/lib/terrainUtils";
 import { Job, loadJobs, saveJobs, createJob, exportJobToFile, exportAllJobsToFile, parseJobsFile } from "@/lib/jobsStore";
@@ -95,6 +95,7 @@ const Index = () => {
 
   // Drawing layer model
   const [drawingLayers, setDrawingLayers] = useState<DrawingLayer[]>([]);
+  const [drawingFolders, setDrawingFolders] = useState<DrawingFolder[]>([]);
   const [activeDrawLayerId, setActiveDrawLayerId] = useState<string | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const [selectedFeature, setSelectedFeature] = useState<{ layerId: string; featureId: string } | null>(null);
@@ -112,14 +113,45 @@ const Index = () => {
   const defaultCrs: CoordinateSystem = activeJob?.crs ?? "puwg1992";
   useEffect(() => { saveJobs(jobs); }, [jobs]);
 
-  // Auto-zapis: każda zmiana warstw/punktów trafia od razu do aktywnej pracy (JOB).
+  // Auto-zapis: każda zmiana warstw/punktów/folderów trafia od razu do aktywnej pracy (JOB).
   useEffect(() => {
     if (!activeJobId) return;
     setJobs((prev) => prev.map((j) => (j.id !== activeJobId ? j : {
       ...j, updatedAt: Date.now(), center: mapViewRef.current ?? j.center,
-      data: { drawingLayers, kmlLayers },
+      data: { drawingLayers, kmlLayers, drawingFolders },
     })));
-  }, [drawingLayers, kmlLayers, activeJobId]);
+  }, [drawingLayers, kmlLayers, drawingFolders, activeJobId]);
+
+  // ── Foldery grupujące warstwy rysowania ──
+  const handleAddFolder = useCallback(() => {
+    setDrawingFolders((prev) => [...prev, { id: `fld-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, name: `Folder ${prev.length + 1}`, collapsed: false }]);
+  }, []);
+  const handleRemoveFolder = useCallback((id: string) => {
+    setDrawingFolders((prev) => prev.filter((f) => f.id !== id));
+    // Warstwy z usuwanego folderu wracają na poziom główny.
+    setDrawingLayers((prev) => prev.map((l) => (l.folderId === id ? { ...l, folderId: null } : l)));
+  }, []);
+  const handleRenameFolder = useCallback((id: string, name: string) => {
+    setDrawingFolders((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)));
+  }, []);
+  const handleToggleFolderCollapse = useCallback((id: string) => {
+    setDrawingFolders((prev) => prev.map((f) => (f.id === id ? { ...f, collapsed: !f.collapsed } : f)));
+  }, []);
+  const handleMoveLayerToFolder = useCallback((layerId: string, folderId: string | null) => {
+    setDrawingLayers((prev) => prev.map((l) => (l.id === layerId ? { ...l, folderId } : l)));
+  }, []);
+  const handleReorderFolder = useCallback((dragId: string, targetId: string) => {
+    setDrawingFolders((prev) => {
+      const from = prev.findIndex((f) => f.id === dragId);
+      const to = prev.findIndex((f) => f.id === targetId);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
 
 
 
@@ -758,6 +790,7 @@ const Index = () => {
     setCoordSystem(job.crs);
     setDrawingLayers(job.data.drawingLayers ?? []);
     setKmlLayers(job.data.kmlLayers ?? []);
+    setDrawingFolders(job.data.drawingFolders ?? []);
     setActiveDrawLayerId(null);
     setSelectedFeature(null);
     setSelectedFeatures([]);
@@ -772,10 +805,10 @@ const Index = () => {
     const center = mapViewRef.current ?? undefined;
     setJobs((prev) => prev.map((j) => j.id !== activeJobId ? j : {
       ...j, updatedAt: Date.now(), center: center ?? j.center,
-      data: { drawingLayers, kmlLayers },
+      data: { drawingLayers, kmlLayers, drawingFolders },
     }));
     toast.success("Zapisano pracę");
-  }, [activeJobId, drawingLayers, kmlLayers]);
+  }, [activeJobId, drawingLayers, kmlLayers, drawingFolders]);
 
   const handleDeleteJob = useCallback((id: string) => {
     setJobs((prev) => prev.filter((j) => j.id !== id));
@@ -788,18 +821,18 @@ const Index = () => {
     if (!job) return;
     // Zapisz aktualny stan, jeśli to aktywna praca.
     const toExport = id === activeJobId
-      ? { ...job, center: mapViewRef.current ?? job.center, data: { drawingLayers, kmlLayers } }
+      ? { ...job, center: mapViewRef.current ?? job.center, data: { drawingLayers, kmlLayers, drawingFolders } }
       : job;
     exportJobToFile(toExport);
-  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers, drawingFolders]);
 
   const handleExportAllJobs = useCallback(() => {
     const all = activeJobId
-      ? jobs.map((j) => j.id === activeJobId ? { ...j, center: mapViewRef.current ?? j.center, data: { drawingLayers, kmlLayers } } : j)
+      ? jobs.map((j) => j.id === activeJobId ? { ...j, center: mapViewRef.current ?? j.center, data: { drawingLayers, kmlLayers, drawingFolders } } : j)
       : jobs;
     if (all.length === 0) { toast.warning("Brak prac do eksportu"); return; }
     exportAllJobsToFile(all);
-  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers, drawingFolders]);
 
   const handleImportJobs = useCallback(async (file: File) => {
     try {
@@ -1101,7 +1134,7 @@ const Index = () => {
 
         {/* Attributes panel for selected drawn feature */}
         {selectedFeatureData && (
-          <div className="absolute left-2 right-2 bottom-2 z-[1400] max-h-[55vh] overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs md:left-auto md:right-4 md:top-4 md:bottom-auto md:w-40">
+          <div className="absolute right-2 top-16 z-[1400] w-[52%] max-w-[240px] max-h-[55vh] overflow-y-auto rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur text-xs md:right-4 md:top-4 md:w-40">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-foreground">Atrybuty obiektu</h3>
               <button onClick={() => setSelectedFeature(null)} title="Zamknij"
@@ -1177,6 +1210,13 @@ const Index = () => {
           onFinishDrawing={finalizeDrawingNow}
           onAddFeatureToLayer={handleAddFeatureToLayer}
           onExportLayers={handleExportLayers}
+          folders={drawingFolders}
+          onAddFolder={handleAddFolder}
+          onRemoveFolder={handleRemoveFolder}
+          onRenameFolder={handleRenameFolder}
+          onToggleFolderCollapse={handleToggleFolderCollapse}
+          onMoveLayerToFolder={handleMoveLayerToFolder}
+          onReorderFolder={handleReorderFolder}
           defaultCrs={defaultCrs}
           jobs={jobs}
           activeJobId={activeJobId}
