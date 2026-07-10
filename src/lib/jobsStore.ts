@@ -90,6 +90,7 @@ export function parseJobsFile(text: string): Job[] {
       data: {
         drawingLayers: Array.isArray(j.data?.drawingLayers) ? j.data.drawingLayers : [],
         kmlLayers: Array.isArray(j.data?.kmlLayers) ? j.data.kmlLayers : [],
+        drawingFolders: Array.isArray(j.data?.drawingFolders) ? j.data.drawingFolders : [],
       },
     }));
 }
