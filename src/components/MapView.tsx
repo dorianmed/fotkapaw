@@ -808,7 +808,16 @@ const MapView = ({
           const m = L.polyline(f.coordinates, { color: drawColor, weight: weight + 1 })
             .bindTooltip(tooltip, { direction: "top" })
             .addTo(layer);
-          m.on("click", handleClick);
+          m.on("click", (e) => {
+            // W trybie pomiaru: klik w linię pokazuje jej długość.
+            if (measureModeRef.current !== "none") {
+              const pts = f.coordinates.map(([lat, lng]) => ({ lat, lng }));
+              onMeasurementChange?.({ distanceMeters: calcPolylineDistance(pts), areaSquareMeters: 0, pointCount: pts.length });
+              L.DomEvent.stop(e);
+              return;
+            }
+            handleClick(e);
+          });
           if (isSelected) addVertexHandles(dl, f, drawColor);
         } else if (dl.type === "polygon" && f.coordinates.length >= 3) {
           const m = L.polygon(f.coordinates, {
