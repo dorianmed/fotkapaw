@@ -808,7 +808,7 @@ const Index = () => {
       data: { drawingLayers, kmlLayers, drawingFolders },
     }));
     toast.success("Zapisano pracę");
-  }, [activeJobId, drawingLayers, kmlLayers]);
+  }, [activeJobId, drawingLayers, kmlLayers, drawingFolders]);
 
   const handleDeleteJob = useCallback((id: string) => {
     setJobs((prev) => prev.filter((j) => j.id !== id));
@@ -824,7 +824,7 @@ const Index = () => {
       ? { ...job, center: mapViewRef.current ?? job.center, data: { drawingLayers, kmlLayers, drawingFolders } }
       : job;
     exportJobToFile(toExport);
-  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers, drawingFolders]);
 
   const handleExportAllJobs = useCallback(() => {
     const all = activeJobId
@@ -832,7 +832,7 @@ const Index = () => {
       : jobs;
     if (all.length === 0) { toast.warning("Brak prac do eksportu"); return; }
     exportAllJobsToFile(all);
-  }, [jobs, activeJobId, drawingLayers, kmlLayers]);
+  }, [jobs, activeJobId, drawingLayers, kmlLayers, drawingFolders]);
 
   const handleImportJobs = useCallback(async (file: File) => {
     try {
