@@ -790,6 +790,7 @@ const Index = () => {
     setCoordSystem(job.crs);
     setDrawingLayers(job.data.drawingLayers ?? []);
     setKmlLayers(job.data.kmlLayers ?? []);
+    setDrawingFolders(job.data.drawingFolders ?? []);
     setActiveDrawLayerId(null);
     setSelectedFeature(null);
     setSelectedFeatures([]);
