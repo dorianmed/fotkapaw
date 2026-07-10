@@ -141,10 +141,27 @@ const MapView = ({
     return out;
   };
 
+  const measureLineRef = useRef<L.Polyline | null>(null);
+  const measurePolyRef = useRef<L.Polygon | null>(null);
+
+  // Aktualizuje geometrię (linia/poligon) oraz podsumowanie bez odtwarzania markerów.
+  const updateMeasureGeometry = () => {
+    const pts = measurementPointsRef.current.map(([lat, lng]) => ({ lat, lng }));
+    if (measureLineRef.current) measureLineRef.current.setLatLngs(measurementPointsRef.current.map(([lat, lng]) => [lat, lng] as [number, number]));
+    if (measurePolyRef.current) measurePolyRef.current.setLatLngs(measurementPointsRef.current.map(([lat, lng]) => [lat, lng] as [number, number]));
+    onMeasurementChange?.({
+      distanceMeters: calcPolylineDistance(pts),
+      areaSquareMeters: measureModeRef.current === "area" ? calcPolygonArea(pts) : 0,
+      pointCount: pts.length,
+    });
+  };
+
   const redrawMeasurement = () => {
     const layer = measurementLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
+    measureLineRef.current = null;
+    measurePolyRef.current = null;
 
     const points = measurementPointsRef.current.map(([lat, lng]) => ({ lat, lng }));
     if (points.length === 0) {
@@ -155,34 +172,41 @@ const MapView = ({
     const primary = getThemeColor("--primary", "hsl(222.2 47.4% 11.2%)");
     const ring = getThemeColor("--ring", "hsl(217.2 91.2% 59.8%)");
 
-    points.forEach((point, index) => {
-      L.circleMarker([point.lat, point.lng], {
-        radius: 5, color: primary, fillColor: ring, fillOpacity: 1, weight: 2,
-      })
-        .bindTooltip(`${index + 1}`, { permanent: true, direction: "top", offset: [0, -8] })
-        .addTo(layer);
-    });
-
-    const measurement: MeasurementSummary = {
-      distanceMeters: calcPolylineDistance(points),
-      areaSquareMeters: measureModeRef.current === "area" ? calcPolygonArea(points) : 0,
-      pointCount: points.length,
-    };
-
     if (points.length >= 2) {
-      L.polyline(points.map((p) => [p.lat, p.lng] as [number, number]), {
+      measureLineRef.current = L.polyline(points.map((p) => [p.lat, p.lng] as [number, number]), {
         color: primary, weight: 3,
         dashArray: measureModeRef.current === "area" ? "6 4" : undefined,
       }).addTo(layer);
     }
 
     if (measureModeRef.current === "area" && points.length >= 3) {
-      L.polygon(points.map((p) => [p.lat, p.lng] as [number, number]), {
+      measurePolyRef.current = L.polygon(points.map((p) => [p.lat, p.lng] as [number, number]), {
         color: primary, fillColor: ring, fillOpacity: 0.18, weight: 2,
       }).addTo(layer);
     }
 
-    onMeasurementChange?.(measurement);
+    // Przeciągalne wierzchołki pomiaru – zmiana pozycji aktualizuje odległość/pole na żywo.
+    points.forEach((point, index) => {
+      const icon = L.divIcon({
+        html: `<div style="width:14px;height:14px;background:${ring};border:2px solid ${primary};border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,.5);cursor:grab"></div>`,
+        iconSize: [14, 14], iconAnchor: [7, 7], className: "",
+      });
+      const m = L.marker([point.lat, point.lng], { icon, draggable: true, zIndexOffset: 3000 })
+        .bindTooltip(`${index + 1}`, { permanent: true, direction: "top", offset: [0, -10] })
+        .addTo(layer);
+      m.on("drag", () => {
+        const ll = m.getLatLng();
+        measurementPointsRef.current[index] = [ll.lat, ll.lng];
+        updateMeasureGeometry();
+      });
+      m.on("dragend", () => {
+        const snapped = snapForDrawing(m.getLatLng());
+        measurementPointsRef.current[index] = [snapped.lat, snapped.lng];
+        redrawMeasurement();
+      });
+    });
+
+    updateMeasureGeometry();
   };
 
   const resetMeasurement = () => {
@@ -197,10 +221,7 @@ const MapView = ({
     const prev = measurementPointsRef.current[measurementPointsRef.current.length - 1];
     if (prev && prev[0] === nextPoint[0] && prev[1] === nextPoint[1]) return true;
 
-    if (measureModeRef.current === "distance" && measurementPointsRef.current.length >= 2) {
-      measurementPointsRef.current = [];
-    }
-
+    // Dystans: budujemy łamaną (wiele odcinków), bez resetu po 2 punktach.
     measurementPointsRef.current = [...measurementPointsRef.current, nextPoint];
     redrawMeasurement();
     return true;
