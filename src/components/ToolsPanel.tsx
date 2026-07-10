@@ -121,6 +121,13 @@ const ToolsPanel = ({
     setShowAddLayer(false);
   };
 
+  // Zakończ bieżącą warstwę: sfinalizuj rysowanie i wyłącz tryb rysowania.
+  const endActiveLayer = () => {
+    onFinishDrawing();
+    onSetActiveDrawLayer(null);
+    finishAddLayer();
+  };
+
   // ── GPS ──
   const [gpsTarget, setGpsTarget] = useState<string>("new"); // "new" | layerId
   const [gpsName, setGpsName] = useState("");
