@@ -4,13 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DrawingLayer, DrawMode } from "@/types/drawing";
+import { DrawingLayer, DrawMode, DrawingFolder } from "@/types/drawing";
 import { CoordinateSystem, EXPORT_EPSG, formatCoordinates } from "@/lib/coordinateUtils";
 import JobsPanel from "@/components/JobsPanel";
 import { Job } from "@/lib/jobsStore";
 import {
   PenTool, Satellite, Download, Plus, CircleDot, Minus, Square, Eye, EyeOff,
-  Trash2, Edit2, MapPin, Crosshair, Check,
+  Trash2, Edit2, MapPin, Crosshair, Check, FolderPlus, Folder, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
