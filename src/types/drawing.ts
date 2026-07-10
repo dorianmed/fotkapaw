@@ -21,5 +21,14 @@ export interface DrawingLayer {
   color: string;
   /** Domyślny układ współrzędnych warstwy (do eksportu). */
   crs?: "wgs84" | "puwg1992" | "puwg2000";
+  /** Identyfikator folderu grupującego (null = poziom główny). */
+  folderId?: string | null;
   features: DrawnFeature[];
+}
+
+/** Folder grupujący warstwy rysowania (opcjonalny). */
+export interface DrawingFolder {
+  id: string;
+  name: string;
+  collapsed?: boolean;
 }
