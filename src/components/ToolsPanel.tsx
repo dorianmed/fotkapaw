@@ -234,6 +234,39 @@ const ToolsPanel = ({
     onExportLayers(ids, format, exportEpsg, exportScope);
   };
 
+  // Pojedynczy wiersz warstwy (używany w folderze i na poziomie głównym).
+  const renderLayer = (dl: DrawingLayer) => {
+    const isActive = activeDrawLayerId === dl.id;
+    const isEditing = editingLayerId === dl.id;
+    return (
+      <div key={dl.id}
+        draggable
+        onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData("text/plain", `layer:${dl.id}`); }}
+        className={`flex items-center gap-1 rounded-md border px-2 py-1 ${isActive ? "border-primary ring-1 ring-primary/40" : ""}`}>
+        {typeIcon(dl.type)}
+        {isEditing ? (
+          <Input autoFocus defaultValue={dl.name} className="h-6 text-xs flex-1"
+            onBlur={(e) => { onRenameDrawLayer(dl.id, e.target.value || dl.name); setEditingLayerId(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingLayerId(null); }} />
+        ) : (
+          <span className="flex-1 cursor-pointer truncate text-xs font-medium text-foreground"
+            onClick={() => onSetActiveDrawLayer(isActive ? null : dl.id)}
+            title={`${typeLabel(dl.type)} · ${(dl.crs ?? "wgs84").toUpperCase()} — kliknij aby rysować`}>
+            {dl.name}
+          </span>
+        )}
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{dl.features.length}</span>
+        <input type="color" value={dl.color} onChange={(e) => onChangeDrawLayerColor(dl.id, e.target.value)} className="h-5 w-5 cursor-pointer rounded border-0 p-0" title="Kolor" />
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingLayerId(dl.id)} title="Zmień nazwę"><Edit2 className="h-3 w-3" /></Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onToggleDrawLayer(dl.id)}>
+          {dl.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+        </Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemoveDrawLayer(dl.id)}><Trash2 className="h-3 w-3" /></Button>
+      </div>
+    );
+  };
+
+
   return (
     <div className="max-h-[65vh] w-full overflow-y-auto border-l bg-card p-2 md:h-full md:max-h-none md:w-72">
       {/* Uchwyt szuflady (tylko mobile) */}
