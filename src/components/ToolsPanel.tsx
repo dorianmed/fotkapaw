@@ -78,11 +78,13 @@ const ToolsPanel = ({
   onRenameDrawLayer, onChangeDrawLayerColor, onSetDrawLayerType, onUpdateDrawLayer,
   onSelectFeature, onFinishDrawing,
   onAddFeatureToLayer, onExportLayers,
+  folders, onAddFolder, onRemoveFolder, onRenameFolder, onToggleFolderCollapse, onMoveLayerToFolder, onReorderFolder,
   defaultCrs,
   jobs, activeJobId, onCreateJob, onSelectJob, onSaveActiveJob, onDeleteJob,
   onExportJob, onExportAllJobs, onImportJobs,
 }: ToolsPanelProps) => {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
 
   // ── Drawing: nowa warstwa (tworzona od razu – rysowanie po kliknięciu na mapie) ──
   const [showAddLayer, setShowAddLayer] = useState(false);
