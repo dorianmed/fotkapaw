@@ -805,7 +805,7 @@ const Index = () => {
     const center = mapViewRef.current ?? undefined;
     setJobs((prev) => prev.map((j) => j.id !== activeJobId ? j : {
       ...j, updatedAt: Date.now(), center: center ?? j.center,
-      data: { drawingLayers, kmlLayers },
+      data: { drawingLayers, kmlLayers, drawingFolders },
     }));
     toast.success("Zapisano pracę");
   }, [activeJobId, drawingLayers, kmlLayers]);
@@ -821,14 +821,14 @@ const Index = () => {
     if (!job) return;
     // Zapisz aktualny stan, jeśli to aktywna praca.
     const toExport = id === activeJobId
-      ? { ...job, center: mapViewRef.current ?? job.center, data: { drawingLayers, kmlLayers } }
+      ? { ...job, center: mapViewRef.current ?? job.center, data: { drawingLayers, kmlLayers, drawingFolders } }
       : job;
     exportJobToFile(toExport);
   }, [jobs, activeJobId, drawingLayers, kmlLayers]);
 
   const handleExportAllJobs = useCallback(() => {
     const all = activeJobId
-      ? jobs.map((j) => j.id === activeJobId ? { ...j, center: mapViewRef.current ?? j.center, data: { drawingLayers, kmlLayers } } : j)
+      ? jobs.map((j) => j.id === activeJobId ? { ...j, center: mapViewRef.current ?? j.center, data: { drawingLayers, kmlLayers, drawingFolders } } : j)
       : jobs;
     if (all.length === 0) { toast.warning("Brak prac do eksportu"); return; }
     exportAllJobsToFile(all);
