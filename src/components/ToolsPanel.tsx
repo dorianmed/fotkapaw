@@ -41,6 +41,14 @@ interface ToolsPanelProps {
   onFinishDrawing: () => void;
   onAddFeatureToLayer: (layerId: string, coordinates: [number, number][], namePrefix: string, heights?: (number | null)[]) => void;
   onExportLayers: (layerIds: string[], format: "kml" | "dxf" | "geojson" | "txt", epsg: CoordinateSystem, scope: "all" | "selected") => void;
+  // Foldery grupujące warstwy
+  folders: DrawingFolder[];
+  onAddFolder: () => void;
+  onRemoveFolder: (id: string) => void;
+  onRenameFolder: (id: string, name: string) => void;
+  onToggleFolderCollapse: (id: string) => void;
+  onMoveLayerToFolder: (layerId: string, folderId: string | null) => void;
+  onReorderFolder: (dragId: string, targetId: string) => void;
   // JOBS
   defaultCrs: CoordinateSystem;
   jobs: Job[];
