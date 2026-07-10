@@ -287,9 +287,15 @@ const MapView = ({
 
     // Ustawienie widoku na lokalizację pracy (JOB).
     const handleSetView = (event: Event) => {
-      const d = (event as CustomEvent).detail as { lat: number; lng: number; zoom?: number };
+      const d = (event as CustomEvent).detail as { lat: number; lng: number; zoom?: number; fracTop?: number };
       if (typeof d?.lat === "number" && typeof d?.lng === "number") {
-        map.setView([d.lat, d.lng], d.zoom ?? map.getZoom());
+        map.setView([d.lat, d.lng], d.zoom ?? map.getZoom(), { animate: false });
+        // Umieść punkt na zadanej wysokości ekranu (np. 3/4 od dołu = 0.25 od góry),
+        // by nie zasłaniało go dolne menu na telefonie.
+        if (typeof d.fracTop === "number") {
+          const size = map.getSize();
+          map.panBy([0, size.y * (0.5 - d.fracTop)], { animate: false });
+        }
       }
     };
 
