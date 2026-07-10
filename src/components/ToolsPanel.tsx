@@ -297,13 +297,23 @@ const ToolsPanel = ({
 
         {/* ───────── Rysowanie ───────── */}
         <TabsContent value="draw" className="space-y-2 pt-3">
-          <Button size="sm" className="w-full" onClick={openAddLayer}>
-            <Plus className="mr-1 h-3 w-3" /> Dodaj obiekt
-          </Button>
+          <div className="flex gap-1">
+            <Button size="sm" className="flex-1" onClick={openAddLayer}>
+              <Plus className="mr-1 h-3 w-3" /> Dodaj warstwę
+            </Button>
+            {(showAddLayer || activeDrawLayerId) && (
+              <Button size="sm" variant="outline" onClick={endActiveLayer} title="Zakończ warstwę">
+                <Check className="mr-1 h-3 w-3" /> Zakończ
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="px-2" onClick={onAddFolder} title="Dodaj folder">
+              <FolderPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
 
           {showAddLayer && (
             <div className="space-y-2 rounded-md border p-2">
-              <Input className="h-8 text-xs" placeholder="Nazwa obiektu (np. drzewo)" value={newName}
+              <Input className="h-8 text-xs" placeholder="Nazwa warstwy (np. drzewa)" value={newName}
                 onChange={(e) => changeDraftName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && finishAddLayer()} autoFocus />
               <div className="grid grid-cols-3 gap-1">
                 {(["point", "line", "polygon"] as GeomType[]).map((t) => (
@@ -320,60 +330,79 @@ const ToolsPanel = ({
                 </select>
               </div>
               <p className="text-[10px] text-muted-foreground leading-tight">
-                Klikaj na mapie, aby rysować. Warstwa jest już aktywna.
+                Klikaj na mapie, aby rysować. Obiekty zapisują się automatycznie.
               </p>
-              <Button size="sm" className="w-full" onClick={finishAddLayer}><Check className="mr-1 h-3 w-3" /> Gotowe</Button>
+              <Button size="sm" className="w-full" onClick={endActiveLayer}><Check className="mr-1 h-3 w-3" /> Zakończ warstwę</Button>
             </div>
           )}
 
           <div className="space-y-0.5">
             <p className="text-[10px] text-muted-foreground">
               {activeDrawLayerId
-                ? "Klikaj na mapie. Linie/poligony: dwuklik lub Zakończ. ESC = wyjście."
-                : "Kliknij nazwę obiektu, aby aktywować rysowanie."}
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              Kliknij drugi raz w celu zakończenia warstwy.
+                ? "Klikaj na mapie. Obiekty zapisują się od razu. Linie/poligony: dwuklik lub Zakończ. ESC = wyjście."
+                : "Kliknij nazwę warstwy, aby aktywować rysowanie."}
             </p>
           </div>
 
           {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
             <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
-              Zakończ ({drawingInProgressCount} pkt)
+              Zakończ obiekt ({drawingInProgressCount} pkt)
             </Button>
           )}
 
-          {drawingLayers.length === 0 && <p className="text-xs italic text-muted-foreground">Brak obiektów.</p>}
+          {drawingLayers.length === 0 && folders.length === 0 && <p className="text-xs italic text-muted-foreground">Brak warstw.</p>}
 
-          {/* Każdy obiekt = jedna linia z liczbą rekordów po prawej. */}
-          {drawingLayers.map((dl) => {
-            const isActive = activeDrawLayerId === dl.id;
-            const isEditing = editingLayerId === dl.id;
+          {/* Foldery grupujące (przeciągnij warstwę na folder, aby ją dodać) */}
+          {folders.map((fld) => {
+            const layersIn = drawingLayers.filter((l) => l.folderId === fld.id);
+            const isEditingF = editingFolderId === fld.id;
             return (
-              <div key={dl.id} className={`flex items-center gap-1 rounded-md border px-2 py-1 ${isActive ? "border-primary ring-1 ring-primary/40" : ""}`}>
-                {typeIcon(dl.type)}
-                {isEditing ? (
-                  <Input autoFocus defaultValue={dl.name} className="h-6 text-xs flex-1"
-                    onBlur={(e) => { onRenameDrawLayer(dl.id, e.target.value || dl.name); setEditingLayerId(null); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingLayerId(null); }} />
-                ) : (
-                  <span className="flex-1 cursor-pointer truncate text-xs font-medium text-foreground"
-                    onClick={() => onSetActiveDrawLayer(isActive ? null : dl.id)}
-                    title={`${typeLabel(dl.type)} · ${(dl.crs ?? "wgs84").toUpperCase()} — kliknij aby rysować`}>
-                    {dl.name}
-                  </span>
+              <div key={fld.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData("text/plain", `folder:${fld.id}`)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const d = e.dataTransfer.getData("text/plain");
+                  if (d.startsWith("layer:")) onMoveLayerToFolder(d.slice(6), fld.id);
+                  else if (d.startsWith("folder:")) { const id = d.slice(7); if (id !== fld.id) onReorderFolder(id, fld.id); }
+                }}
+                className="rounded-md border">
+                <div className="flex items-center gap-1 bg-muted/40 px-2 py-1">
+                  <button onClick={() => onToggleFolderCollapse(fld.id)} className="text-muted-foreground hover:text-foreground">
+                    {fld.collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                  <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+                  {isEditingF ? (
+                    <Input autoFocus defaultValue={fld.name} className="h-6 flex-1 text-xs"
+                      onBlur={(e) => { onRenameFolder(fld.id, e.target.value || fld.name); setEditingFolderId(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingFolderId(null); }} />
+                  ) : (
+                    <span className="flex-1 cursor-pointer truncate text-xs font-semibold text-foreground" onClick={() => onToggleFolderCollapse(fld.id)}>{fld.name}</span>
+                  )}
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{layersIn.length}</span>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingFolderId(fld.id)} title="Zmień nazwę"><Edit2 className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemoveFolder(fld.id)} title="Usuń folder"><Trash2 className="h-3 w-3" /></Button>
+                </div>
+                {!fld.collapsed && (
+                  <div className="space-y-1 p-1">
+                    {layersIn.length === 0 && <p className="px-1 text-[10px] italic text-muted-foreground">Przeciągnij warstwy tutaj</p>}
+                    {layersIn.map(renderLayer)}
+                  </div>
                 )}
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{dl.features.length}</span>
-                <input type="color" value={dl.color} onChange={(e) => onChangeDrawLayerColor(dl.id, e.target.value)} className="h-5 w-5 cursor-pointer rounded border-0 p-0" title="Kolor" />
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingLayerId(dl.id)} title="Zmień nazwę"><Edit2 className="h-3 w-3" /></Button>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onToggleDrawLayer(dl.id)}>
-                  {dl.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onRemoveDrawLayer(dl.id)}><Trash2 className="h-3 w-3" /></Button>
               </div>
             );
           })}
+
+          {/* Warstwy bez folderu (poziom główny) — strefa upuszczania „wyjmij z folderu” */}
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); const d = e.dataTransfer.getData("text/plain"); if (d.startsWith("layer:")) onMoveLayerToFolder(d.slice(6), null); }}
+            className="min-h-[8px] space-y-1">
+            {drawingLayers.filter((l) => !l.folderId).map(renderLayer)}
+          </div>
         </TabsContent>
+
 
         {/* ───────── Pomiar GPS ───────── */}
         <TabsContent value="gps" className="space-y-2 pt-2">
