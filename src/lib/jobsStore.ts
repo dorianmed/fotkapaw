@@ -26,7 +26,7 @@ export interface Job {
 const KEY = "fotkapaw.jobs.v1";
 const FILE_TAG = "fotkapaw-jobs";
 
-const emptySnapshot = (): JobSnapshot => ({ drawingLayers: [], kmlLayers: [] });
+const emptySnapshot = (): JobSnapshot => ({ drawingLayers: [], kmlLayers: [], drawingFolders: [] });
 
 export function loadJobs(): Job[] {
   try {
