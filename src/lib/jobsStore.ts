@@ -1,11 +1,13 @@
 import { CoordinateSystem } from "./coordinateUtils";
-import { DrawingLayer } from "@/types/drawing";
+import { DrawingLayer, DrawingFolder } from "@/types/drawing";
 import { KmlLayer } from "@/types/photo";
 
 /** Dane robocze zapisywane w obrębie pojedynczej pracy (JOB). */
 export interface JobSnapshot {
   drawingLayers: DrawingLayer[];
   kmlLayers: KmlLayer[];
+  /** Foldery grupujące warstwy rysowania (opcjonalne). */
+  drawingFolders?: DrawingFolder[];
 }
 
 /** Pojedyncza praca (projekt). Element nadrzędny zarządzania danymi. */
