@@ -1183,16 +1183,46 @@ const Index = () => {
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground mb-0.5">
-                  Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.) · {formatCoordinates(0, 0, coordSystem).label}
+                  Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.) · {coordSystem === "wgs84" ? "WGS84 (lat, lng)" : "X (N), Y (E)"} — edytuj, aby przesunąć
                 </p>
-                <div className="max-h-32 overflow-y-auto rounded border bg-background p-1 font-mono text-[10px] leading-tight">
+                <div className="max-h-40 overflow-y-auto rounded border bg-background p-1 font-mono text-[10px] leading-tight space-y-1">
                   {selectedFeatureData.feature.coordinates.map(([lat, lng], i) => {
+                    const commit = (aStr: string, bStr: string) => {
+                      const a = parseFloat(aStr.replace(",", "."));
+                      const b = parseFloat(bStr.replace(",", "."));
+                      if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+                      let nLat = a, nLng = b;
+                      if (coordSystem !== "wgs84") {
+                        [nLat, nLng] = unprojectCoords(a, b, coordSystem); // a=X(N), b=Y(E)
+                      }
+                      if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return;
+                      handleMoveFeatureVertex(selectedFeatureData.layer.id, selectedFeatureData.feature.id, i, nLat, nLng);
+                    };
+                    let aVal: string, bVal: string, aLbl: string, bLbl: string;
                     if (coordSystem === "wgs84") {
-                      return <div key={i}>{i + 1}: {lat.toFixed(7)}, {lng.toFixed(7)}</div>;
+                      aVal = lat.toFixed(7); bVal = lng.toFixed(7); aLbl = "lat"; bLbl = "lng";
+                    } else {
+                      const [E, N] = projectCoords(lat, lng, coordSystem);
+                      const p = exportPrecision(coordSystem);
+                      aVal = N.toFixed(p); bVal = E.toFixed(p); aLbl = "X"; bLbl = "Y";
                     }
-                    const [E, N] = projectCoords(lat, lng, coordSystem);
-                    const p = exportPrecision(coordSystem);
-                    return <div key={i}>{i + 1}: X {N.toFixed(p)}, Y {E.toFixed(p)}</div>;
+                    return (
+                      <div key={`${i}-${aVal}-${bVal}`} className="flex items-center gap-1">
+                        <span className="w-4 shrink-0 text-muted-foreground">{i + 1}</span>
+                        <input
+                          className="h-6 w-full min-w-0 rounded border bg-background px-1 text-[10px]"
+                          title={aLbl} defaultValue={aVal}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          onBlur={(e) => commit(e.target.value, bVal)}
+                        />
+                        <input
+                          className="h-6 w-full min-w-0 rounded border bg-background px-1 text-[10px]"
+                          title={bLbl} defaultValue={bVal}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          onBlur={(e) => commit(aVal, e.target.value)}
+                        />
+                      </div>
+                    );
                   })}
                 </div>
               </div>
