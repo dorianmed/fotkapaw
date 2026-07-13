@@ -69,6 +69,8 @@ const MapView = ({
   baseLayer,
   wmsUrl,
   wmsLayer,
+  prgAdmin = false,
+  prgParcels = false,
   selectedPhotoIds = [],
   onPhotoSelect,
   measureMode,
