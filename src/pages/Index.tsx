@@ -50,6 +50,8 @@ const Index = () => {
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
   const [baseLayer, setBaseLayer] = useState<"osm" | "google" | "wms">("osm");
+  const [prgAdmin, setPrgAdmin] = useState(false);
+  const [prgParcels, setPrgParcels] = useState(false);
   const [wmsUrl, setWmsUrl] = useState<string>("https://sh.dataspace.copernicus.eu/ogc/wms/2a3dca8e-5210-4752-ba0f-cd3300dee17d");
   const [wmsLayers, setWmsLayers] = useState<string[]>([]);
   const [wmsSelectedLayer, setWmsSelectedLayer] = useState<string | null>(null);
