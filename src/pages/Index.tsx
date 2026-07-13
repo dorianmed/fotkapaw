@@ -64,7 +64,7 @@ const Index = () => {
   const [clickedTerrainHeight, setClickedTerrainHeight] = useState<{ loading: boolean; value: number | null } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
-  const [useDemForAgl, setUseDemForAgl] = useState(false);
+  const [useDemForAgl, setUseDemForAgl] = useState(true);
   const [showAglPrompt, setShowAglPrompt] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
@@ -309,6 +309,24 @@ const Index = () => {
         }
       }
 
+      // Średnia wysokość lotu (AGL) z całego nalotu wg metody fotogrametrycznej:
+      // AGL = średnia wysokość GPS (MSL) − średnia wysokość terenu z DEM.
+      // Używana jako wartość odniesienia oraz fallback dla pojedynczych zdjęć,
+      // gdy per-punktowe DEM/GPS jest niewiarygodne.
+      let missionAgl: number | null = null;
+      if (terrainHeights) {
+        let gpsSum = 0, demSum = 0, n = 0;
+        for (let i = 0; i < parsed.length; i++) {
+          const alt = parsed[i].exif.GPSAltitude;
+          const terr = terrainHeights[i];
+          if (typeof alt === "number" && typeof terr === "number") { gpsSum += alt; demSum += terr; n++; }
+        }
+        if (n > 0) {
+          const avg = (gpsSum - demSum) / n;
+          if (avg > 1) missionAgl = avg;
+        }
+      }
+
       // 3) zbuduj zdjęcia (każde w try/catch, by jedno błędne nie zatrzymało importu)
       const newPhotos: PhotoPoint[] = [];
       let aglSum = 0, aglN = 0;
@@ -319,9 +337,10 @@ const Index = () => {
           if (terrainHeights) {
             const droneMsl = exif.GPSAltitude;
             const terr = terrainHeights[i];
-            if (typeof droneMsl === "number" && typeof terr === "number") {
-              const computed = droneMsl - terr;
-              if (computed > 1) altitudeAGL = computed;
+            if (typeof droneMsl === "number" && typeof terr === "number" && droneMsl - terr > 1) {
+              altitudeAGL = droneMsl - terr;
+            } else if (missionAgl !== null) {
+              altitudeAGL = missionAgl;
             }
           }
           aglSum += altitudeAGL; aglN++;
