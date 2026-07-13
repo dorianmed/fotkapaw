@@ -3,7 +3,8 @@
  * All imports convert to GeoJSON FeatureCollection.
  */
 import DxfParser from "dxf-parser";
-import shp from "shpjs";
+import { parseShp, parseDbf, combine } from "shpjs";
+import { unzipSync } from "fflate";
 import { CoordinateSystem, unprojectCoords, exportPrecision, prjWkt } from "@/lib/coordinateUtils";
 
 // ─── DXF Import ───────────────────────────────────────────────
