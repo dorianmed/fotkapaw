@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
+import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords, unprojectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer, DrawingFolder } from "@/types/drawing";
