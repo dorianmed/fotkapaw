@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Ruler, Pentagon, Ban, Layers, Check, Download, Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Ruler, Pentagon, Ban, Layers, Check, Download, Loader2, Upload, FileText, Map as MapIcon } from "lucide-react";
 import { MeasureMode, MeasurementSummary } from "@/types/photo";
 
 interface MapControlsProps {
@@ -9,6 +9,14 @@ interface MapControlsProps {
   onClearMeasurement: () => void;
   baseLayer: "osm" | "google" | "wms";
   onBaseLayerChange: (value: "osm" | "google" | "wms") => void;
+  // PRG / KIEG overlays
+  prgAdmin: boolean;
+  prgParcels: boolean;
+  onTogglePrgAdmin: (value: boolean) => void;
+  onTogglePrgParcels: (value: boolean) => void;
+  // Import
+  onImportKml: (file: File) => void;
+  onImportVector: (file: File) => void;
   // WMS
   wmsUrl: string;
   wmsLayers: string[];
