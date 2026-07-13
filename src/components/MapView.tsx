@@ -502,6 +502,43 @@ const MapView = ({
     }
   }, [baseLayer, wmsUrl, wmsLayer]);
 
+  // Nakładki PRG/KIEG (granice administracyjne + działki). Zależne od baseLayer,
+  // bo zmiana podkładu usuwa wszystkie TileLayer – wtedy odtwarzamy nakładki.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    prgLayersRef.current.forEach((l) => map.removeLayer(l));
+    prgLayersRef.current = [];
+
+    if (prgAdmin) {
+      const l = L.tileLayer.wms(
+        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PRG/WMS/AdministrativeBoundaries",
+        {
+          layers: "A01_Granice_wojewodztw,A02_Granice_powiatow,A03_Granice_gmin",
+          format: "image/png", transparent: true, version: "1.3.0",
+          maxZoom: 22, attribution: "© PRG GUGiK", opacity: 0.9,
+        } as any,
+      );
+      l.setZIndex(440);
+      l.addTo(map);
+      prgLayersRef.current.push(l);
+    }
+
+    if (prgParcels) {
+      const l = L.tileLayer.wms(
+        "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow",
+        {
+          layers: "dzialki,numery_dzialek",
+          format: "image/png", transparent: true, version: "1.3.0",
+          maxZoom: 22, attribution: "© KIEG GUGiK", opacity: 0.9,
+        } as any,
+      );
+      l.setZIndex(450);
+      l.addTo(map);
+      prgLayersRef.current.push(l);
+    }
+  }, [prgAdmin, prgParcels, baseLayer]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
