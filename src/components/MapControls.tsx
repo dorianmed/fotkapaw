@@ -105,6 +105,22 @@ const MapControls = ({
       <div className="flex items-start gap-2">
         {layersOpen && (
           <div className="flex w-56 flex-col gap-1 rounded-lg border bg-card p-1 shadow-lg">
+            {/* ── Granice PRG / działki (GUGiK) ── */}
+            <div className="space-y-1 rounded-md border bg-muted/40 p-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">
+                <MapIcon className="h-3 w-3" /> Granice urzędowe (GUGiK)
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[11px] text-foreground hover:bg-muted">
+                <input type="checkbox" checked={prgAdmin} onChange={(e) => onTogglePrgAdmin(e.target.checked)} />
+                Granice adm. (PRG: woj./pow./gm.)
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[11px] text-foreground hover:bg-muted">
+                <input type="checkbox" checked={prgParcels} onChange={(e) => onTogglePrgParcels(e.target.checked)} />
+                Działki ewidencyjne (KIEG)
+              </label>
+              <p className="text-[9px] leading-tight text-muted-foreground">Widoczność zależna od skali mapy.</p>
+            </div>
+
             {BASE_OPTIONS.map((o) => (
               <button
                 key={o.value}
