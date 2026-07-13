@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Ruler, Pentagon, Ban, Layers, Check, Download, Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Ruler, Pentagon, Ban, Layers, Check, Download, Loader2, Upload, FileText, Map as MapIcon } from "lucide-react";
 import { MeasureMode, MeasurementSummary } from "@/types/photo";
 
 interface MapControlsProps {
@@ -9,6 +9,14 @@ interface MapControlsProps {
   onClearMeasurement: () => void;
   baseLayer: "osm" | "google" | "wms";
   onBaseLayerChange: (value: "osm" | "google" | "wms") => void;
+  // PRG / KIEG overlays
+  prgAdmin: boolean;
+  prgParcels: boolean;
+  onTogglePrgAdmin: (value: boolean) => void;
+  onTogglePrgParcels: (value: boolean) => void;
+  // Import
+  onImportKml: (file: File) => void;
+  onImportVector: (file: File) => void;
   // WMS
   wmsUrl: string;
   wmsLayers: string[];
@@ -28,11 +36,16 @@ const BASE_OPTIONS: { value: "osm" | "google" | "wms"; label: string; hint: stri
 const MapControls = ({
   measureMode, measurement, onMeasureModeChange, onClearMeasurement,
   baseLayer, onBaseLayerChange,
+  prgAdmin, prgParcels, onTogglePrgAdmin, onTogglePrgParcels,
+  onImportKml, onImportVector,
   wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
   onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
 }: MapControlsProps) => {
   const [measureOpen, setMeasureOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const kmlInputRef = useRef<HTMLInputElement>(null);
+  const vecInputRef = useRef<HTMLInputElement>(null);
 
   const measuring = measureMode !== "none";
 
@@ -58,10 +71,10 @@ const MapControls = ({
             </button>
             <button
               onClick={() => { onMeasureModeChange("none"); onClearMeasurement(); }}
-              title="Wyłącz / wyczyść"
+              title="Wyczyść pomiar"
               className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-foreground hover:bg-muted"
             >
-              <Ban className="h-3.5 w-3.5" /> Wyłącz
+              <Ban className="h-3.5 w-3.5" /> Wyczyść
             </button>
           </div>
         )}
@@ -92,6 +105,22 @@ const MapControls = ({
       <div className="flex items-start gap-2">
         {layersOpen && (
           <div className="flex w-56 flex-col gap-1 rounded-lg border bg-card p-1 shadow-lg">
+            {/* ── Granice PRG / działki (GUGiK) ── */}
+            <div className="space-y-1 rounded-md border bg-muted/40 p-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">
+                <MapIcon className="h-3 w-3" /> Granice urzędowe (GUGiK)
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[11px] text-foreground hover:bg-muted">
+                <input type="checkbox" checked={prgAdmin} onChange={(e) => onTogglePrgAdmin(e.target.checked)} />
+                Granice adm. (PRG: woj./pow./gm.)
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[11px] text-foreground hover:bg-muted">
+                <input type="checkbox" checked={prgParcels} onChange={(e) => onTogglePrgParcels(e.target.checked)} />
+                Działki ewidencyjne (KIEG)
+              </label>
+              <p className="text-[9px] leading-tight text-muted-foreground">Widoczność zależna od skali mapy.</p>
+            </div>
+
             {BASE_OPTIONS.map((o) => (
               <button
                 key={o.value}
@@ -148,6 +177,52 @@ const MapControls = ({
           <Layers className="h-5 w-5" />
         </button>
       </div>
+
+      {/* ── Import warstw wektorowych ── */}
+      <div className="flex items-start gap-2">
+        {importOpen && (
+          <div className="flex w-48 flex-col gap-1 rounded-lg border bg-card p-1 shadow-lg">
+            <button
+              onClick={() => kmlInputRef.current?.click()}
+              className="flex items-center gap-2 rounded px-2 py-1 text-xs text-foreground hover:bg-muted"
+            >
+              <Upload className="h-3.5 w-3.5" /> Importuj KML / KMZ
+            </button>
+            <button
+              onClick={() => vecInputRef.current?.click()}
+              className="flex items-center gap-2 rounded px-2 py-1 text-xs text-foreground hover:bg-muted"
+            >
+              <FileText className="h-3.5 w-3.5" /> DXF / SHP / TXT / GML
+            </button>
+          </div>
+        )}
+        <button
+          onClick={() => setImportOpen((v) => !v)}
+          title="Import warstw"
+          className={`flex items-center gap-1.5 rounded-lg border p-2.5 shadow-lg ${importOpen ? "bg-primary text-primary-foreground" : "bg-card text-foreground"}`}
+        >
+          <Upload className="h-5 w-5" />
+          <span className="text-xs font-medium">Import</span>
+        </button>
+      </div>
+
+      {/* ukryte inputy plików */}
+      <input
+        ref={kmlInputRef}
+        type="file"
+        accept=".kml,.kmz"
+        multiple
+        className="hidden"
+        onChange={(e) => { const files = e.target.files; if (files) Array.from(files).forEach((f) => onImportKml(f)); e.target.value = ""; setImportOpen(false); }}
+      />
+      <input
+        ref={vecInputRef}
+        type="file"
+        accept=".dxf,.shp,.zip,.txt,.csv,.gml"
+        multiple
+        className="hidden"
+        onChange={(e) => { const files = e.target.files; if (files) Array.from(files).forEach((f) => onImportVector(f)); e.target.value = ""; setImportOpen(false); }}
+      />
     </div>
   );
 };

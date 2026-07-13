@@ -3,7 +3,8 @@
  * All imports convert to GeoJSON FeatureCollection.
  */
 import DxfParser from "dxf-parser";
-import shp from "shpjs";
+import { parseShp, parseDbf, combine } from "shpjs";
+import { unzipSync } from "fflate";
 import { CoordinateSystem, unprojectCoords, exportPrecision, prjWkt } from "@/lib/coordinateUtils";
 
 // ─── DXF Import ───────────────────────────────────────────────
@@ -75,13 +76,58 @@ export async function importDxf(file: File): Promise<GeoJSON.FeatureCollection> 
 
 export async function importShp(file: File): Promise<GeoJSON.FeatureCollection> {
   const buffer = await file.arrayBuffer();
-  const geojson = await shp(buffer);
-  // shpjs can return a single FeatureCollection or an array
-  if (Array.isArray(geojson)) {
-    const allFeatures = geojson.flatMap((fc: any) => fc.features ?? []);
-    return { type: "FeatureCollection", features: allFeatures };
+  const bytes = new Uint8Array(buffer);
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b; // sygnatura "PK"
+
+  const toArrayBuffer = (u8: Uint8Array): ArrayBuffer =>
+    u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+
+  // Pojedynczy plik .shp (bez zip) — geometria bez atrybutów i bez reprojekcji.
+  if (!isZip) {
+    const geoms = parseShp(buffer);
+    const features = (Array.isArray(geoms) ? geoms : []).map((geometry: any) => ({
+      type: "Feature" as const,
+      properties: {},
+      geometry,
+    }));
+    return { type: "FeatureCollection", features };
   }
-  return geojson as GeoJSON.FeatureCollection;
+
+  // Archiwum ZIP — rozpakowujemy odpornym fflate (shpjs 6.x psuje się na wielu ZIP-ach).
+  let entries: Record<string, Uint8Array>;
+  try {
+    entries = unzipSync(bytes);
+  } catch {
+    throw new Error("Nie udało się rozpakować archiwum ZIP z plikami SHP");
+  }
+
+  const decoder = new TextDecoder();
+  const byBase = new Map<string, { shp?: Uint8Array; dbf?: Uint8Array; prj?: string }>();
+  for (const [path, data] of Object.entries(entries)) {
+    const m = path.toLowerCase().match(/(.*)\.(shp|dbf|prj)$/);
+    if (!m) continue;
+    const rec = byBase.get(m[1]) ?? {};
+    if (m[2] === "shp") rec.shp = data;
+    else if (m[2] === "dbf") rec.dbf = data;
+    else if (m[2] === "prj") rec.prj = decoder.decode(data);
+    byBase.set(m[1], rec);
+  }
+
+  const features: GeoJSON.Feature[] = [];
+  for (const rec of byBase.values()) {
+    if (!rec.shp) continue;
+    try {
+      const geoms = parseShp(toArrayBuffer(rec.shp), rec.prj as any);
+      const props = rec.dbf ? parseDbf(toArrayBuffer(rec.dbf)) : [];
+      const fc: any = combine([geoms, props]);
+      if (fc?.features?.length) features.push(...fc.features);
+    } catch {
+      /* pomiń błędną warstwę, ale nie przerywaj importu pozostałych */
+    }
+  }
+
+  if (features.length === 0) throw new Error("Brak poprawnych warstw .shp w archiwum ZIP");
+  return { type: "FeatureCollection", features };
 }
 
 // ─── TXT/CSV Import ──────────────────────────────────────────

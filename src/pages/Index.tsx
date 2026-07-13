@@ -17,7 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords, exportPrecision } from "@/lib/coordinateUtils";
+import { CoordinateSystem, COORDINATE_SYSTEMS, formatCoordinates, projectCoords, unprojectCoords, exportPrecision } from "@/lib/coordinateUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeCoverage, CoverageResult } from "@/lib/coverageUtils";
 import { DrawingLayer, DrawingFolder } from "@/types/drawing";
@@ -50,6 +50,8 @@ const Index = () => {
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
   const [showOverlapHeatmap, setShowOverlapHeatmap] = useState(false);
   const [baseLayer, setBaseLayer] = useState<"osm" | "google" | "wms">("osm");
+  const [prgAdmin, setPrgAdmin] = useState(false);
+  const [prgParcels, setPrgParcels] = useState(false);
   const [wmsUrl, setWmsUrl] = useState<string>("https://sh.dataspace.copernicus.eu/ogc/wms/2a3dca8e-5210-4752-ba0f-cd3300dee17d");
   const [wmsLayers, setWmsLayers] = useState<string[]>([]);
   const [wmsSelectedLayer, setWmsSelectedLayer] = useState<string | null>(null);
@@ -64,7 +66,7 @@ const Index = () => {
   const [clickedTerrainHeight, setClickedTerrainHeight] = useState<{ loading: boolean; value: number | null } | null>(null);
   const [coordSystem, setCoordSystem] = useState<CoordinateSystem>("wgs84");
   const [aglAltitude, setAglAltitude] = useState<number | null>(null);
-  const [useDemForAgl, setUseDemForAgl] = useState(false);
+  const [useDemForAgl, setUseDemForAgl] = useState(true);
   const [showAglPrompt, setShowAglPrompt] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [coverageResults, setCoverageResults] = useState<Record<string, CoverageResult>>({});
@@ -309,6 +311,24 @@ const Index = () => {
         }
       }
 
+      // Średnia wysokość lotu (AGL) z całego nalotu wg metody fotogrametrycznej:
+      // AGL = średnia wysokość GPS (MSL) − średnia wysokość terenu z DEM.
+      // Używana jako wartość odniesienia oraz fallback dla pojedynczych zdjęć,
+      // gdy per-punktowe DEM/GPS jest niewiarygodne.
+      let missionAgl: number | null = null;
+      if (terrainHeights) {
+        let gpsSum = 0, demSum = 0, n = 0;
+        for (let i = 0; i < parsed.length; i++) {
+          const alt = parsed[i].exif.GPSAltitude;
+          const terr = terrainHeights[i];
+          if (typeof alt === "number" && typeof terr === "number") { gpsSum += alt; demSum += terr; n++; }
+        }
+        if (n > 0) {
+          const avg = (gpsSum - demSum) / n;
+          if (avg > 1) missionAgl = avg;
+        }
+      }
+
       // 3) zbuduj zdjęcia (każde w try/catch, by jedno błędne nie zatrzymało importu)
       const newPhotos: PhotoPoint[] = [];
       let aglSum = 0, aglN = 0;
@@ -319,9 +339,10 @@ const Index = () => {
           if (terrainHeights) {
             const droneMsl = exif.GPSAltitude;
             const terr = terrainHeights[i];
-            if (typeof droneMsl === "number" && typeof terr === "number") {
-              const computed = droneMsl - terr;
-              if (computed > 1) altitudeAGL = computed;
+            if (typeof droneMsl === "number" && typeof terr === "number" && droneMsl - terr > 1) {
+              altitudeAGL = droneMsl - terr;
+            } else if (missionAgl !== null) {
+              altitudeAGL = missionAgl;
             }
           }
           aglSum += altitudeAGL; aglN++;
@@ -999,6 +1020,8 @@ const Index = () => {
           baseLayer={baseLayer}
           wmsUrl={wmsUrl}
           wmsLayer={wmsSelectedLayer}
+          prgAdmin={prgAdmin}
+          prgParcels={prgParcels}
           selectedPhotoIds={selectedPhotoIds}
           onPhotoSelect={handlePhotoSelect}
           measureMode={measureMode}
@@ -1029,6 +1052,12 @@ const Index = () => {
           onClearMeasurement={handleClearMeasurement}
           baseLayer={baseLayer}
           onBaseLayerChange={setBaseLayer}
+          prgAdmin={prgAdmin}
+          prgParcels={prgParcels}
+          onTogglePrgAdmin={setPrgAdmin}
+          onTogglePrgParcels={setPrgParcels}
+          onImportKml={handleImportKml}
+          onImportVector={handleImportVector}
           wmsUrl={wmsUrl}
           wmsLayers={wmsLayers}
           wmsSelectedLayer={wmsSelectedLayer}
@@ -1154,16 +1183,46 @@ const Index = () => {
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground mb-0.5">
-                  Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.) · {formatCoordinates(0, 0, coordSystem).label}
+                  Współrzędne ({selectedFeatureData.feature.coordinates.length} pkt.) · {coordSystem === "wgs84" ? "WGS84 (lat, lng)" : "X (N), Y (E)"} — edytuj, aby przesunąć
                 </p>
-                <div className="max-h-32 overflow-y-auto rounded border bg-background p-1 font-mono text-[10px] leading-tight">
+                <div className="max-h-40 overflow-y-auto rounded border bg-background p-1 font-mono text-[10px] leading-tight space-y-1">
                   {selectedFeatureData.feature.coordinates.map(([lat, lng], i) => {
+                    const commit = (aStr: string, bStr: string) => {
+                      const a = parseFloat(aStr.replace(",", "."));
+                      const b = parseFloat(bStr.replace(",", "."));
+                      if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+                      let nLat = a, nLng = b;
+                      if (coordSystem !== "wgs84") {
+                        [nLat, nLng] = unprojectCoords(a, b, coordSystem); // a=X(N), b=Y(E)
+                      }
+                      if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return;
+                      handleMoveFeatureVertex(selectedFeatureData.layer.id, selectedFeatureData.feature.id, i, nLat, nLng);
+                    };
+                    let aVal: string, bVal: string, aLbl: string, bLbl: string;
                     if (coordSystem === "wgs84") {
-                      return <div key={i}>{i + 1}: {lat.toFixed(7)}, {lng.toFixed(7)}</div>;
+                      aVal = lat.toFixed(7); bVal = lng.toFixed(7); aLbl = "lat"; bLbl = "lng";
+                    } else {
+                      const [E, N] = projectCoords(lat, lng, coordSystem);
+                      const p = exportPrecision(coordSystem);
+                      aVal = N.toFixed(p); bVal = E.toFixed(p); aLbl = "X"; bLbl = "Y";
                     }
-                    const [E, N] = projectCoords(lat, lng, coordSystem);
-                    const p = exportPrecision(coordSystem);
-                    return <div key={i}>{i + 1}: X {N.toFixed(p)}, Y {E.toFixed(p)}</div>;
+                    return (
+                      <div key={`${i}-${aVal}-${bVal}`} className="flex items-center gap-1">
+                        <span className="w-4 shrink-0 text-muted-foreground">{i + 1}</span>
+                        <input
+                          className="h-6 w-full min-w-0 rounded border bg-background px-1 text-[10px]"
+                          title={aLbl} defaultValue={aVal}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          onBlur={(e) => commit(e.target.value, bVal)}
+                        />
+                        <input
+                          className="h-6 w-full min-w-0 rounded border bg-background px-1 text-[10px]"
+                          title={bLbl} defaultValue={bVal}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          onBlur={(e) => commit(aVal, e.target.value)}
+                        />
+                      </div>
+                    );
                   })}
                 </div>
               </div>

@@ -63,7 +63,7 @@ interface ToolsPanelProps {
 }
 
 const typeIcon = (t: string) => t === "point" ? <CircleDot className="h-3 w-3" /> : t === "line" ? <Minus className="h-3 w-3" /> : <Square className="h-3 w-3" />;
-const typeLabel = (t: string) => t === "point" ? "Punktowa" : t === "line" ? "Liniowa" : "Powierzchniowa";
+const typeLabel = (t: string) => t === "point" ? "Punkt" : t === "line" ? "Linia" : "Pow.";
 
 const getPosition = (): Promise<GeolocationPosition> =>
   new Promise((resolve, reject) => {
@@ -301,11 +301,6 @@ const ToolsPanel = ({
             <Button size="sm" className="flex-1" onClick={openAddLayer}>
               <Plus className="mr-1 h-3 w-3" /> Dodaj warstwę
             </Button>
-            {(showAddLayer || activeDrawLayerId) && (
-              <Button size="sm" variant="outline" onClick={endActiveLayer} title="Zakończ warstwę">
-                <Check className="mr-1 h-3 w-3" /> Zakończ
-              </Button>
-            )}
             <Button size="sm" variant="outline" className="px-2" onClick={onAddFolder} title="Dodaj folder">
               <FolderPlus className="h-3.5 w-3.5" />
             </Button>

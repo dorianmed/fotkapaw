@@ -27,6 +27,10 @@ interface MapViewProps {
   baseLayer: "osm" | "google" | "wms";
   wmsUrl?: string;
   wmsLayer?: string | null;
+  /** Nakładka granic administracyjnych z PRG (woj./pow./gminy) – zależna od skali. */
+  prgAdmin?: boolean;
+  /** Nakładka działek ewidencyjnych (KIEG GUGiK) – widoczna przy dużym zbliżeniu. */
+  prgParcels?: boolean;
   selectedPhotoIds?: string[];
   onPhotoSelect?: (id: string | null, ctrlKey: boolean) => void;
   measureMode: MeasureMode;
@@ -65,6 +69,8 @@ const MapView = ({
   baseLayer,
   wmsUrl,
   wmsLayer,
+  prgAdmin = false,
+  prgParcels = false,
   selectedPhotoIds = [],
   onPhotoSelect,
   measureMode,
@@ -100,6 +106,7 @@ const MapView = ({
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
   const drawingLayerRef = useRef<L.LayerGroup | null>(null);
   const baseLayerRef = useRef(baseLayer);
+  const prgLayersRef = useRef<L.TileLayer[]>([]);
   const wmsUrlRef = useRef(wmsUrl);
   const wmsLayerNameRef = useRef(wmsLayer);
   const onWmsPixelInfoRef = useRef(onWmsPixelInfo);
@@ -494,6 +501,43 @@ const MapView = ({
       }).addTo(map);
     }
   }, [baseLayer, wmsUrl, wmsLayer]);
+
+  // Nakładki PRG/KIEG (granice administracyjne + działki). Zależne od baseLayer,
+  // bo zmiana podkładu usuwa wszystkie TileLayer – wtedy odtwarzamy nakładki.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    prgLayersRef.current.forEach((l) => map.removeLayer(l));
+    prgLayersRef.current = [];
+
+    if (prgAdmin) {
+      const l = L.tileLayer.wms(
+        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PRG/WMS/AdministrativeBoundaries",
+        {
+          layers: "A01_Granice_wojewodztw,A02_Granice_powiatow,A03_Granice_gmin",
+          format: "image/png", transparent: true, version: "1.3.0",
+          maxZoom: 22, attribution: "© PRG GUGiK", opacity: 0.9,
+        } as any,
+      );
+      l.setZIndex(440);
+      l.addTo(map);
+      prgLayersRef.current.push(l);
+    }
+
+    if (prgParcels) {
+      const l = L.tileLayer.wms(
+        "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow",
+        {
+          layers: "dzialki,numery_dzialek",
+          format: "image/png", transparent: true, version: "1.3.0",
+          maxZoom: 22, attribution: "© KIEG GUGiK", opacity: 0.9,
+        } as any,
+      );
+      l.setZIndex(450);
+      l.addTo(map);
+      prgLayersRef.current.push(l);
+    }
+  }, [prgAdmin, prgParcels, baseLayer]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -232,21 +232,8 @@ const Sidebar = ({
       </Section>
 
 
-      <Section icon={<Layers className="h-4 w-4" />} title="Warstwy wektorowe" description="Importuj KML / DXF / SHP / TXT i zarządzaj warstwami.">
-        <label className="block">
-          <input type="file" accept=".kml,.kmz" multiple className="hidden"
-            onChange={(e) => { const files = e.target.files; if (files) Array.from(files).forEach((f) => onImportKml(f)); e.target.value = ""; }} />
-          <Button variant="outline" className="w-full" asChild>
-            <span><Upload className="mr-2 h-4 w-4" /> Importuj KML</span>
-          </Button>
-        </label>
-        <label className="block">
-          <input type="file" accept=".dxf,.shp,.zip,.txt,.csv,.gml" multiple className="hidden"
-            onChange={(e) => { const files = e.target.files; if (files) Array.from(files).forEach((f) => onImportVector(f)); e.target.value = ""; }} />
-          <Button variant="outline" className="w-full" asChild>
-            <span><FileText className="mr-2 h-4 w-4" /> Importuj DXF / SHP / TXT / GML</span>
-          </Button>
-        </label>
+      <Section icon={<Layers className="h-4 w-4" />} title="Warstwy wektorowe" description="Import w prawym panelu mapy (ikona „Import”). Tu zarządzasz i eksportujesz warstwy.">
+
         {kmlLayers.length > 0 && (
           <div className="flex items-center gap-2 rounded border p-2">
             <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Układ eksportu TXT:</Label>
