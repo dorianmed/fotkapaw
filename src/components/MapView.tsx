@@ -27,6 +27,10 @@ interface MapViewProps {
   baseLayer: "osm" | "google" | "wms";
   wmsUrl?: string;
   wmsLayer?: string | null;
+  /** Nakładka granic administracyjnych z PRG (woj./pow./gminy) – zależna od skali. */
+  prgAdmin?: boolean;
+  /** Nakładka działek ewidencyjnych (KIEG GUGiK) – widoczna przy dużym zbliżeniu. */
+  prgParcels?: boolean;
   selectedPhotoIds?: string[];
   onPhotoSelect?: (id: string | null, ctrlKey: boolean) => void;
   measureMode: MeasureMode;
