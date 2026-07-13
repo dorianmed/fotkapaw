@@ -1048,6 +1048,12 @@ const Index = () => {
           onClearMeasurement={handleClearMeasurement}
           baseLayer={baseLayer}
           onBaseLayerChange={setBaseLayer}
+          prgAdmin={prgAdmin}
+          prgParcels={prgParcels}
+          onTogglePrgAdmin={setPrgAdmin}
+          onTogglePrgParcels={setPrgParcels}
+          onImportKml={handleImportKml}
+          onImportVector={handleImportVector}
           wmsUrl={wmsUrl}
           wmsLayers={wmsLayers}
           wmsSelectedLayer={wmsSelectedLayer}
