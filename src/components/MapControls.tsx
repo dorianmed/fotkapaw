@@ -58,10 +58,10 @@ const MapControls = ({
             </button>
             <button
               onClick={() => { onMeasureModeChange("none"); onClearMeasurement(); }}
-              title="Wyłącz / wyczyść"
+              title="Wyczyść pomiar"
               className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-foreground hover:bg-muted"
             >
-              <Ban className="h-3.5 w-3.5" /> Wyłącz
+              <Ban className="h-3.5 w-3.5" /> Wyczyść
             </button>
           </div>
         )}
