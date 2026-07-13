@@ -106,6 +106,7 @@ const MapView = ({
   const snapTargetsRef = useRef(createPhotoSnapTargets(photos));
   const drawingLayerRef = useRef<L.LayerGroup | null>(null);
   const baseLayerRef = useRef(baseLayer);
+  const prgLayersRef = useRef<L.TileLayer[]>([]);
   const wmsUrlRef = useRef(wmsUrl);
   const wmsLayerNameRef = useRef(wmsLayer);
   const onWmsPixelInfoRef = useRef(onWmsPixelInfo);
