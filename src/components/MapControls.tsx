@@ -36,11 +36,16 @@ const BASE_OPTIONS: { value: "osm" | "google" | "wms"; label: string; hint: stri
 const MapControls = ({
   measureMode, measurement, onMeasureModeChange, onClearMeasurement,
   baseLayer, onBaseLayerChange,
+  prgAdmin, prgParcels, onTogglePrgAdmin, onTogglePrgParcels,
+  onImportKml, onImportVector,
   wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
   onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
 }: MapControlsProps) => {
   const [measureOpen, setMeasureOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const kmlInputRef = useRef<HTMLInputElement>(null);
+  const vecInputRef = useRef<HTMLInputElement>(null);
 
   const measuring = measureMode !== "none";
 
