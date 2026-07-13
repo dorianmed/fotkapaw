@@ -1020,6 +1020,8 @@ const Index = () => {
           baseLayer={baseLayer}
           wmsUrl={wmsUrl}
           wmsLayer={wmsSelectedLayer}
+          prgAdmin={prgAdmin}
+          prgParcels={prgParcels}
           selectedPhotoIds={selectedPhotoIds}
           onPhotoSelect={handlePhotoSelect}
           measureMode={measureMode}
