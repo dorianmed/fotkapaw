@@ -128,7 +128,9 @@ export function calcFootprint(sensor: SensorConfig, altitudeAGL?: number) {
 
 export function calcGSD(sensor: SensorConfig, altitudeAGL?: number): number {
   const alt = altitudeAGL ?? sensor.flightAltitude;
-  return (sensor.sensorWidth / (sensor.focalLength * sensor.resolutionX)) * alt * 100;
+  const gsdX = (sensor.sensorWidth / (sensor.focalLength * sensor.resolutionX)) * alt * 100;
+  const gsdY = (sensor.sensorHeight / (sensor.focalLength * sensor.resolutionY)) * alt * 100;
+  return (gsdX + gsdY) / 2;
 }
 
 export function calcFootprintCorners(
@@ -196,6 +198,7 @@ export function assignHeadings(photos: PhotoPoint[]): PhotoPoint[] {
   // Use IMMEDIATE neighbour for heading (i → i+1). Lookahead of 3 photos
   // crossed strips and produced wildly wrong "along-track" decomposition.
   return sorted.map((photo, index) => {
+    if (typeof photo.heading === "number" && Number.isFinite(photo.heading)) return photo;
     const heading = index < sorted.length - 1
       ? calcBearing(photo.lat, photo.lng, sorted[index + 1].lat, sorted[index + 1].lng)
       : calcBearing(sorted[index - 1].lat, sorted[index - 1].lng, photo.lat, photo.lng);
@@ -207,14 +210,16 @@ export function findOverlappingPhotos(selected: PhotoPoint, photos: PhotoPoint[]
   const results: OverlapCandidate[] = [];
   for (const photo of photos) {
     if (photo.id === selected.id) continue;
-    const { distance, headingDiff, alongTrack, acrossTrack } = projectPhotoOffsetMeters(selected, photo);
+    const { distance, alongTrack, acrossTrack } = projectPhotoOffsetMeters(selected, photo);
     const maxReach = Math.max(selected.footprintWidth, selected.footprintHeight, photo.footprintWidth, photo.footprintHeight);
     if (distance > maxReach * 2) continue;
     const avgAlongDim = (selected.footprintHeight + photo.footprintHeight) / 2;
     const avgAcrossDim = (selected.footprintWidth + photo.footprintWidth) / 2;
-    const forward = calcAxisOverlapPercent(alongTrack, avgAlongDim);
-    const lateral = calcAxisOverlapPercent(acrossTrack, avgAcrossDim);
-    const type: "forward" | "lateral" | "both" = headingDiff < 45 || headingDiff > 135 ? "forward" : "lateral";
+    const forward = calcAxisOverlapPercent(Math.abs(alongTrack), avgAlongDim);
+    const lateral = calcAxisOverlapPercent(Math.abs(acrossTrack), avgAcrossDim);
+    const type: "forward" | "lateral" | "both" = forward > 0 && lateral > 0
+      ? "both"
+      : Math.abs(alongTrack) >= Math.abs(acrossTrack) ? "forward" : "lateral";
     if (forward > 0 || lateral > 0) {
       results.push({ photo, forward, lateral, type, alongTrack, acrossTrack });
     }
@@ -236,47 +241,64 @@ export function analyzeOverlap(photos: PhotoPoint[]): OverlapStats {
   const forwardPairs: OverlapPair[] = [];
   const lateralPairs = new Map<string, OverlapPair>();
 
-  // Forward: kolejne pary w czasie, pomijając skoki na nowy pas
+  // Forward: kolejne pary w czasie w tym samym pasie.
+  // Wzór fotogrametryczny: p = (d_p - b_p) / d_p * 100%,
+  // gdzie d_p = długość kadru w osi lotu (footprintHeight), b_p = baza podłużna.
   for (let i = 0; i < sorted.length - 1; i++) {
     const a = sorted[i];
     const b = sorted[i + 1];
-    const distance = calcDistance(a.lat, a.lng, b.lat, b.lng);
+    const { alongTrack, acrossTrack } = projectPhotoOffsetMeters(a, b);
+    const along = Math.abs(alongTrack);
+    const across = Math.abs(acrossTrack);
     const avgAlongDim = (a.footprintHeight + b.footprintHeight) / 2;
-    if (avgAlongDim <= 0) continue;
-    // Skok pasa: distance znacznie większy niż wzdłużny wymiar footprintu
-    if (distance > avgAlongDim * 1.5) continue;
-    const forward = Math.max(0, (1 - distance / avgAlongDim) * 100);
-    forwardPairs.push({
-      id1: a.id, id2: b.id, forward, lateral: 0, type: "forward",
-      alongTrack: distance, acrossTrack: 0,
-    });
+    const avgAcrossDim = (a.footprintWidth + b.footprintWidth) / 2;
+    if (avgAlongDim <= 0 || avgAcrossDim <= 0) continue;
+    // Skok na sąsiedni pas: zbyt duża składowa poprzeczna albo zbyt długa baza.
+    if (across > avgAcrossDim * 0.45) continue;
+    if (along <= 0.05 || along > avgAlongDim * 1.5) continue;
+    const forward = calcAxisOverlapPercent(along, avgAlongDim);
+    if (forward > 0) {
+      forwardPairs.push({
+        id1: a.id, id2: b.id, forward, lateral: 0, type: "forward",
+        alongTrack: along, acrossTrack: across,
+      });
+    }
   }
 
-  // Lateral: dla każdego zdjęcia szukamy najbliższego sąsiada poprzecznego
-  // (NIE bezpośredniego sąsiada czasowego), używając rzutu na oś prostopadłą.
+  // Lateral: dla każdego zdjęcia szukamy najbliższego sąsiada w sąsiednim pasie.
+  // Wzór: q = (w - b_q) / w * 100%, gdzie w = szerokość kadru,
+  // b_q = odległość między pasami (składowa poprzeczna).
   for (let i = 0; i < sorted.length; i++) {
     const photo = sorted[i];
-    let best: { other: PhotoPoint; lateralDist: number } | null = null;
+    let best: { other: PhotoPoint; lateralDist: number; alongDist: number } | null = null;
     for (let j = 0; j < sorted.length; j++) {
-      if (j === i || j === i - 1 || j === i + 1) continue;
+      if (j === i) continue;
+      if (sorted.length > 2 && (j === i - 1 || j === i + 1)) continue;
       const other = sorted[j];
-      const { distance, headingDiff, acrossTrack, alongTrack } = projectPhotoOffsetMeters(photo, other);
-      // Tylko prawdziwie "boczni" sąsiedzi: bliżej w osi wzdłużnej niż footprint, daleko w osi poprzecznej
-      if (Math.abs(alongTrack) > photo.footprintHeight) continue;
-      if (distance > Math.max(photo.footprintWidth, other.footprintWidth) * 2) continue;
+      const { distance, acrossTrack, alongTrack } = projectPhotoOffsetMeters(photo, other);
+      const avgAlongDim = (photo.footprintHeight + other.footprintHeight) / 2;
+      const avgAcrossDim = (photo.footprintWidth + other.footprintWidth) / 2;
+      const alongDist = Math.abs(alongTrack);
       const lateralDist = Math.abs(acrossTrack);
-      if (!best || lateralDist < best.lateralDist) best = { other, lateralDist };
+      // Sąsiedni pas: podobna pozycja w osi lotu, istotna składowa poprzeczna.
+      if (alongDist > avgAlongDim * 0.75) continue;
+      if (lateralDist < avgAcrossDim * 0.08) continue;
+      if (lateralDist > avgAcrossDim * 1.5) continue;
+      if (distance > Math.max(avgAlongDim, avgAcrossDim) * 2) continue;
+      if (!best || alongDist < best.alongDist || (Math.abs(alongDist - best.alongDist) < 0.1 && lateralDist < best.lateralDist)) {
+        best = { other, lateralDist, alongDist };
+      }
     }
     if (best) {
       const avgAcrossDim = (photo.footprintWidth + best.other.footprintWidth) / 2;
       if (avgAcrossDim <= 0) continue;
-      const lateral = Math.max(0, (1 - best.lateralDist / avgAcrossDim) * 100);
+      const lateral = calcAxisOverlapPercent(best.lateralDist, avgAcrossDim);
       if (lateral <= 0) continue;
       const key = [photo.id, best.other.id].sort().join("-");
       if (!lateralPairs.has(key)) {
         lateralPairs.set(key, {
           id1: photo.id, id2: best.other.id, forward: 0, lateral, type: "lateral",
-          alongTrack: 0, acrossTrack: best.lateralDist,
+          alongTrack: best.alongDist, acrossTrack: best.lateralDist,
         });
       }
     }

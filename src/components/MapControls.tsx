@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Ruler, Pentagon, Ban, Layers, Check, Download, Loader2, Upload, FileText, Map as MapIcon } from "lucide-react";
+import { Ruler, Pentagon, Ban, Layers, Check, Download, Loader2, Upload, FileText, Map as MapIcon, MousePointerClick } from "lucide-react";
 import { MeasureMode, MeasurementSummary } from "@/types/photo";
 
 interface MapControlsProps {
@@ -17,6 +17,8 @@ interface MapControlsProps {
   // Import
   onImportKml: (file: File) => void;
   onImportVector: (file: File) => void;
+  parcelPickMode: boolean;
+  onToggleParcelPickMode: () => void;
   // WMS
   wmsUrl: string;
   wmsLayers: string[];
@@ -38,6 +40,7 @@ const MapControls = ({
   baseLayer, onBaseLayerChange,
   prgAdmin, prgParcels, onTogglePrgAdmin, onTogglePrgParcels,
   onImportKml, onImportVector,
+  parcelPickMode, onToggleParcelPickMode,
   wmsUrl, wmsLayers, wmsSelectedLayer, wmsLoading,
   onWmsUrlChange, onWmsLoadLayers, onWmsLayerChange,
 }: MapControlsProps) => {
@@ -79,7 +82,10 @@ const MapControls = ({
           </div>
         )}
         <button
-          onClick={() => setMeasureOpen((v) => !v)}
+          onClick={() => {
+            if (measureMode === "none") onMeasureModeChange("distance");
+            setMeasureOpen((v) => !v);
+          }}
           title="Pomiary na mapie"
           className={`rounded-lg border p-2.5 shadow-lg transition-colors ${measuring ? "bg-primary text-primary-foreground" : "bg-card text-foreground"}`}
         >
@@ -193,6 +199,12 @@ const MapControls = ({
               className="flex items-center gap-2 rounded px-2 py-1 text-xs text-foreground hover:bg-muted"
             >
               <FileText className="h-3.5 w-3.5" /> DXF / SHP / TXT / GML
+            </button>
+            <button
+              onClick={onToggleParcelPickMode}
+              className={`flex items-center gap-2 rounded px-2 py-1 text-xs ${parcelPickMode ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"}`}
+            >
+              <MousePointerClick className="h-3.5 w-3.5" /> Kliknij działkę
             </button>
           </div>
         )}

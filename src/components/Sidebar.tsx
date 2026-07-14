@@ -195,27 +195,29 @@ const Sidebar = ({
 
       <Separator />
 
-      <Section icon={<Upload className="h-4 w-4" />} title="Importuj zdjęcia" description="Kliknij, aby wybrać zdjęcia lub folder z lotu.">
-        <label className="block">
-          <input type="file" multiple accept="image/jpeg,image/jpg,image/tiff" className="hidden"
-            onChange={(e) => e.target.files && onImportPhotos(e.target.files)} />
-          <Button variant="default" className="w-full" asChild>
-            <span><Upload className="mr-2 h-4 w-4" /> Wybierz zdjęcia</span>
-          </Button>
-        </label>
-        <label className="block">
-          <input
-            type="file"
-            multiple
-            accept="image/jpeg,image/jpg,image/tiff"
-            className="hidden"
-            {...({ webkitdirectory: "", directory: "" } as any)}
-            onChange={(e) => e.target.files && onImportPhotos(e.target.files)}
-          />
-          <Button variant="outline" className="w-full" asChild>
-            <span><FolderOpen className="mr-2 h-4 w-4" /> Importuj folder</span>
-          </Button>
-        </label>
+      <Section icon={<Upload className="h-4 w-4" />} title="Importuj zdjęcia">
+        <div className="grid grid-cols-2 gap-1">
+          <label className="block">
+            <input type="file" multiple accept="image/jpeg,image/jpg,image/tiff" className="hidden"
+              onChange={(e) => e.target.files && onImportPhotos(e.target.files)} />
+            <Button variant="default" className="h-8 w-full px-2" asChild title="Wybierz zdjęcia">
+              <span><Upload className="h-4 w-4" /></span>
+            </Button>
+          </label>
+          <label className="block">
+            <input
+              type="file"
+              multiple
+              accept="image/jpeg,image/jpg,image/tiff"
+              className="hidden"
+              {...({ webkitdirectory: "", directory: "" } as any)}
+              onChange={(e) => e.target.files && onImportPhotos(e.target.files)}
+            />
+            <Button variant="outline" className="h-8 w-full px-2" asChild title="Importuj folder">
+              <span><FolderOpen className="h-4 w-4" /></span>
+            </Button>
+          </label>
+        </div>
         {photos.length > 0 && (
           <div className="flex items-center justify-between gap-1">
             <Badge variant="secondary">{photos.length} zdjęć</Badge>
