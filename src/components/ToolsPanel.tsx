@@ -64,6 +64,7 @@ interface ToolsPanelProps {
 
 const typeIcon = (t: string) => t === "point" ? <CircleDot className="h-3 w-3" /> : t === "line" ? <Minus className="h-3 w-3" /> : <Square className="h-3 w-3" />;
 const typeLabel = (t: string) => t === "point" ? "Punkt" : t === "line" ? "Linia" : "Pow.";
+const compactBtn = "h-[22px] px-2 text-[10px] leading-none";
 
 const getPosition = (): Promise<GeolocationPosition> =>
   new Promise((resolve, reject) => {
@@ -298,10 +299,10 @@ const ToolsPanel = ({
         {/* ───────── Rysowanie ───────── */}
         <TabsContent value="draw" className="space-y-2 pt-3">
           <div className="flex gap-1">
-            <Button size="sm" className="flex-1" onClick={openAddLayer}>
+            <Button size="sm" className={`flex-1 ${compactBtn}`} onClick={openAddLayer}>
               <Plus className="mr-1 h-3 w-3" /> Dodaj warstwę
             </Button>
-            <Button size="sm" variant="outline" className="px-2" onClick={onAddFolder} title="Dodaj folder">
+            <Button size="sm" variant="outline" className="h-[22px] px-2" onClick={onAddFolder} title="Dodaj folder">
               <FolderPlus className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -312,7 +313,7 @@ const ToolsPanel = ({
                 onChange={(e) => changeDraftName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && finishAddLayer()} autoFocus />
               <div className="grid grid-cols-3 gap-1">
                 {(["point", "line", "polygon"] as GeomType[]).map((t) => (
-                  <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => changeDraftType(t)}>
+                  <Button key={t} variant={newType === t ? "default" : "outline"} size="sm" className={compactBtn} onClick={() => changeDraftType(t)}>
                     {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
                   </Button>
                 ))}
@@ -327,7 +328,7 @@ const ToolsPanel = ({
               <p className="text-[10px] text-muted-foreground leading-tight">
                 Klikaj na mapie, aby rysować. Obiekty zapisują się automatycznie.
               </p>
-              <Button size="sm" className="w-full" onClick={endActiveLayer}><Check className="mr-1 h-3 w-3" /> Zakończ warstwę</Button>
+              <Button size="sm" className={`w-full ${compactBtn}`} onClick={endActiveLayer}><Check className="mr-1 h-3 w-3" /> Zakończ warstwę</Button>
             </div>
           )}
 
@@ -340,7 +341,7 @@ const ToolsPanel = ({
           </div>
 
           {activeDrawLayerId && drawMode !== "point" && drawingInProgressCount > 0 && (
-            <Button size="sm" className="w-full" onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
+            <Button size="sm" className={`w-full ${compactBtn}`} onClick={onFinishDrawing} disabled={drawingInProgressCount < (drawMode === "line" ? 2 : 3)}>
               Zakończ obiekt ({drawingInProgressCount} pkt)
             </Button>
           )}
@@ -417,7 +418,7 @@ const ToolsPanel = ({
                 <Input className="h-8 text-xs" placeholder="Nazwa nowej warstwy" value={gpsName} onChange={(e) => setGpsName(e.target.value)} />
                 <div className="grid grid-cols-3 gap-1">
                   {(["point", "line", "polygon"] as GeomType[]).map((t) => (
-                    <Button key={t} variant={gpsType === t ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => { setGpsType(t); setGpsVertices([]); setGpsHeights([]); }}>
+                    <Button key={t} variant={gpsType === t ? "default" : "outline"} size="sm" className={compactBtn} onClick={() => { setGpsType(t); setGpsVertices([]); setGpsHeights([]); }}>
                       {typeIcon(t)}<span className="ml-1">{typeLabel(t)}</span>
                     </Button>
                   ))}
@@ -442,26 +443,26 @@ const ToolsPanel = ({
             {effType === "point" ? (
               <div className="space-y-1">
                 <div className="flex items-center gap-1">
-                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className="h-7 px-2 text-[10px]" onClick={() => setGpsLabelMode("number")}>Nr</Button>
-                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className="h-7 px-2 text-[10px]" onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
+                  <Button variant={gpsLabelMode === "number" ? "default" : "outline"} size="sm" className={compactBtn} onClick={() => setGpsLabelMode("number")}>Nr</Button>
+                  <Button variant={gpsLabelMode === "name" ? "default" : "outline"} size="sm" className={compactBtn} onClick={() => setGpsLabelMode("name")}>Nazwa</Button>
                   {gpsLabelMode === "name" && (
                     <Input className="h-7 text-xs flex-1 min-w-0" placeholder="Nazwa" value={gpsLabel} onChange={(e) => setGpsLabel(e.target.value)} />
                   )}
-                  <Button size="sm" className="h-7 flex-1 bg-blue-600 text-white hover:bg-blue-700 text-[11px]" disabled={gpsBusy} onClick={measurePoint}>
+                  <Button size="sm" className={`flex-1 bg-blue-600 text-white hover:bg-blue-700 ${compactBtn}`} disabled={gpsBusy} onClick={measurePoint}>
                     <Crosshair className="mr-1 h-3 w-3" /> {gpsBusy ? "Pomiar…" : "Pomierz punkt"}
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="space-y-1">
-                <Button size="sm" variant="outline" className="w-full" disabled={gpsBusy} onClick={addVertex}>
+                <Button size="sm" variant="outline" className={`w-full ${compactBtn}`} disabled={gpsBusy} onClick={addVertex}>
                   <MapPin className="mr-1 h-3 w-3" /> {gpsBusy ? "Pomiar…" : `Dodaj punkt (${gpsVertices.length})`}
                 </Button>
-                <Button size="sm" className="w-full" disabled={gpsVertices.length < (effType === "line" ? 2 : 3)} onClick={finishGpsFeature}>
+                <Button size="sm" className={`w-full ${compactBtn}`} disabled={gpsVertices.length < (effType === "line" ? 2 : 3)} onClick={finishGpsFeature}>
                   <Check className="mr-1 h-3 w-3" /> Zakończ obiekt
                 </Button>
                 {gpsVertices.length > 0 && (
-                  <Button size="sm" variant="ghost" className="w-full text-[10px]" onClick={() => { setGpsVertices([]); setGpsHeights([]); }}>Wyczyść punkty</Button>
+                  <Button size="sm" variant="ghost" className={`w-full ${compactBtn}`} onClick={() => { setGpsVertices([]); setGpsHeights([]); }}>Wyczyść punkty</Button>
                 )}
               </div>
             )}
@@ -505,18 +506,18 @@ const ToolsPanel = ({
               </select>
             </div>
             <div className="grid grid-cols-2 gap-1">
-              <Button variant={exportScope === "all" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setExportScope("all")}>Cała warstwa</Button>
-              <Button variant={exportScope === "selected" ? "default" : "outline"} size="sm" className="text-[10px]" onClick={() => setExportScope("selected")}>
+              <Button variant={exportScope === "all" ? "default" : "outline"} size="sm" className={compactBtn} onClick={() => setExportScope("all")}>Cała warstwa</Button>
+              <Button variant={exportScope === "selected" ? "default" : "outline"} size="sm" className={compactBtn} onClick={() => setExportScope("selected")}>
                 Zaznaczone ({selectedFeatures.length})
               </Button>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-1">
-            <Button variant="outline" size="sm" className="text-[10px]" onClick={() => doExport("kml")}>KML</Button>
-            <Button variant="outline" size="sm" className="text-[10px]" onClick={() => doExport("dxf")}>DXF</Button>
-            <Button variant="outline" size="sm" className="text-[10px]" onClick={() => doExport("geojson")}>GeoJSON</Button>
-            <Button variant="outline" size="sm" className="text-[10px]" onClick={() => doExport("txt")}>TXT</Button>
+            <Button variant="outline" size="sm" className={compactBtn} onClick={() => doExport("kml")}>KML</Button>
+            <Button variant="outline" size="sm" className={compactBtn} onClick={() => doExport("dxf")}>DXF</Button>
+            <Button variant="outline" size="sm" className={compactBtn} onClick={() => doExport("geojson")}>GeoJSON</Button>
+            <Button variant="outline" size="sm" className={compactBtn} onClick={() => doExport("txt")}>TXT</Button>
           </div>
           <p className="text-[10px] text-muted-foreground">KML zawsze w WGS84 (wymóg OGC). „Zaznaczone” używa obiektów wybranych narzędziem strzałki na mapie.</p>
         </TabsContent>

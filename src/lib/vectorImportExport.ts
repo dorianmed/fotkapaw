@@ -74,7 +74,73 @@ export async function importDxf(file: File): Promise<GeoJSON.FeatureCollection> 
 
 // ─── SHP Import ───────────────────────────────────────────────
 
-export async function importShp(file: File): Promise<GeoJSON.FeatureCollection> {
+function detectShpCrsFromPrj(prj?: string): CoordinateSystem | null {
+  const p = (prj ?? "").toUpperCase();
+  if (!p) return null;
+  if (p.includes('EPSG","4326') || p.includes("EPSG:4326") || p.includes("WGS_1984") || p.includes("WGS 84")) return "wgs84";
+  if (p.includes('EPSG","2180') || p.includes("EPSG:2180") || p.includes("POLAND CS92") || p.includes("PUWG 1992")) return "puwg1992";
+  if (/EPSG["':,\s]+217[6-9]/.test(p) || p.includes("POLAND CS2000") || p.includes("PUWG 2000")) return "puwg2000";
+  return null;
+}
+
+function firstCoordinate(geojson: GeoJSON.FeatureCollection): number[] | null {
+  const walk = (coords: any): number[] | null => {
+    if (Array.isArray(coords) && typeof coords[0] === "number" && typeof coords[1] === "number") return coords as number[];
+    if (Array.isArray(coords)) {
+      for (const c of coords) {
+        const hit = walk(c);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  for (const f of geojson.features) {
+    const hit = walk((f.geometry as any)?.coordinates);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function detectShpCrsFromCoords(geojson: GeoJSON.FeatureCollection): CoordinateSystem | null {
+  const c = firstCoordinate(geojson);
+  if (!c) return null;
+  const [e, n] = c;
+  if (Math.abs(e) <= 180 && Math.abs(n) <= 90) return "wgs84";
+  // PUWG 2000: E zawiera prefiks strefy 5..8, N ok. 5.3–6.1 mln w Polsce.
+  if (e >= 5_000_000 && e < 9_000_000 && n >= 5_300_000 && n <= 6_200_000) return "puwg2000";
+  // PUWG 1992: dla Polski E ok. 100–900 tys., N ok. 100–900 tys.
+  if (e >= 100_000 && e <= 900_000 && n >= 100_000 && n <= 900_000) return "puwg1992";
+  return null;
+}
+
+function transformGeometryCoords(geom: any, fn: (coord: number[]) => number[]): any {
+  if (!geom?.coordinates) return geom;
+  const walk = (coords: any): any => {
+    if (Array.isArray(coords) && typeof coords[0] === "number" && typeof coords[1] === "number") return fn(coords as number[]);
+    return Array.isArray(coords) ? coords.map(walk) : coords;
+  };
+  return { ...geom, coordinates: walk(geom.coordinates) };
+}
+
+function normalizeShpGeoJson(geojson: GeoJSON.FeatureCollection, prj?: string): { geojson: GeoJSON.FeatureCollection; crs: CoordinateSystem } {
+  const crs = detectShpCrsFromPrj(prj) ?? detectShpCrsFromCoords(geojson) ?? "wgs84";
+  if (crs === "wgs84") return { geojson, crs };
+  return {
+    crs,
+    geojson: {
+      type: "FeatureCollection",
+      features: geojson.features.map((f) => ({
+        ...f,
+        geometry: transformGeometryCoords(f.geometry, (coord) => {
+          const [lat, lng] = unprojectCoords(coord[1], coord[0], crs); // SHP: [E, N] -> WGS [lat,lng]
+          return coord.length > 2 ? [lng, lat, coord[2]] : [lng, lat];
+        }) as any,
+      })),
+    },
+  };
+}
+
+export async function importShp(file: File): Promise<{ geojson: GeoJSON.FeatureCollection; crs: CoordinateSystem }> {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b; // sygnatura "PK"
@@ -90,7 +156,7 @@ export async function importShp(file: File): Promise<GeoJSON.FeatureCollection> 
       properties: {},
       geometry,
     }));
-    return { type: "FeatureCollection", features };
+    return normalizeShpGeoJson({ type: "FeatureCollection", features });
   }
 
   // Archiwum ZIP — rozpakowujemy odpornym fflate (shpjs 6.x psuje się na wielu ZIP-ach).
@@ -114,20 +180,29 @@ export async function importShp(file: File): Promise<GeoJSON.FeatureCollection> 
   }
 
   const features: GeoJSON.Feature[] = [];
+  let detectedCrs: CoordinateSystem | null = null;
   for (const rec of byBase.values()) {
     if (!rec.shp) continue;
     try {
-      const geoms = parseShp(toArrayBuffer(rec.shp), rec.prj as any);
+      const prjCrs = detectShpCrsFromPrj(rec.prj);
+      const geoms = prjCrs && prjCrs !== "wgs84"
+        ? parseShp(toArrayBuffer(rec.shp))
+        : parseShp(toArrayBuffer(rec.shp), rec.prj as any);
       const props = rec.dbf ? parseDbf(toArrayBuffer(rec.dbf)) : [];
       const fc: any = combine([geoms, props]);
-      if (fc?.features?.length) features.push(...fc.features);
+      if (fc?.features?.length) {
+        const normalized = normalizeShpGeoJson(fc, rec.prj);
+        detectedCrs = detectedCrs ?? normalized.crs;
+        features.push(...normalized.geojson.features);
+      }
     } catch {
       /* pomiń błędną warstwę, ale nie przerywaj importu pozostałych */
     }
   }
 
   if (features.length === 0) throw new Error("Brak poprawnych warstw .shp w archiwum ZIP");
-  return { type: "FeatureCollection", features };
+  const merged: GeoJSON.FeatureCollection = { type: "FeatureCollection", features };
+  return { geojson: merged, crs: detectedCrs ?? detectShpCrsFromCoords(merged) ?? "wgs84" };
 }
 
 // ─── TXT/CSV Import ──────────────────────────────────────────

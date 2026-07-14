@@ -8,6 +8,7 @@ import { Camera, Menu, X, MousePointer2, PanelRight, Trash2, GripVertical } from
 import MapView from "@/components/MapView";
 import MapControls from "@/components/MapControls";
 import Sidebar from "@/components/Sidebar";
+import { queryParcelByPoint } from "@/components/ParcelSearch";
 import ToolsPanel from "@/components/ToolsPanel";
 import TxtImportDialog from "@/components/TxtImportDialog";
 import { DEFAULT_FOOTPRINT_STYLE, FootprintStyle, KmlLayer, MeasureMode, MeasurementSummary, PhotoPoint, SensorConfig } from "@/types/photo";
@@ -45,6 +46,7 @@ const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [photos, setPhotos] = useState<PhotoPoint[]>([]);
   const [kmlLayers, setKmlLayers] = useState<KmlLayer[]>([]);
+  const [parcelPickMode, setParcelPickMode] = useState(false);
   const [sensor, setSensor] = useState<SensorConfig>({ resolutionX: 4000, resolutionY: 3000, sensorWidth: 13.2, sensorHeight: 8.8, focalLength: 8.8, flightAltitude: 100 });
   const [showFootprints, setShowFootprints] = useState(true);
   const [footprintStyle, setFootprintStyle] = useState<FootprintStyle>(DEFAULT_FOOTPRINT_STYLE);
@@ -355,8 +357,9 @@ const Index = () => {
             focalLength: estimated.focal, flightAltitude: altitudeAGL,
           };
           const { groundWidth, groundHeight } = calcFootprint(currentSensor, altitudeAGL);
-          const longSide = Math.max(groundWidth, groundHeight);
-          const shortSide = Math.min(groundWidth, groundHeight);
+          const exifHeading = Number(
+            exif.GPSImgDirection ?? exif.GPSDestBearing ?? exif.FlightYawDegree ?? exif.GimbalYawDegree ?? exif.CameraYaw
+          );
 
           newPhotos.push({
             id: `${file.name}-${Date.now()}-${Math.random()}`,
@@ -365,7 +368,8 @@ const Index = () => {
             altitudeAGL,
             terrainHeight,
             timestamp: exif.DateTimeOriginal ? new Date(exif.DateTimeOriginal) : undefined,
-            footprintWidth: longSide, footprintHeight: shortSide, footprintCorners: [],
+            heading: Number.isFinite(exifHeading) ? ((exifHeading % 360) + 360) % 360 : undefined,
+            footprintWidth: groundWidth, footprintHeight: groundHeight, footprintCorners: [],
             gsd: calcGSD(currentSensor, altitudeAGL),
             sensorInfo: { sensorWidth: estimated.width, sensorHeight: estimated.height, focalLength: estimated.focal, resolutionX: estimated.resX, source: estimated.source },
             thumbnailUrl: URL.createObjectURL(file),
@@ -500,12 +504,17 @@ const Index = () => {
         return;
       }
       let geojson: GeoJSON.FeatureCollection;
+      let layerCrs: CoordinateSystem | undefined;
       if (ext === "dxf") geojson = await importDxf(file);
-      else if (ext === "shp" || ext === "zip") geojson = await importShp(file);
+      else if (ext === "shp" || ext === "zip") {
+        const imported = await importShp(file);
+        geojson = imported.geojson;
+        layerCrs = imported.crs;
+      }
       else { toast.error(`Nieobsługiwany format: .${ext}`); return; }
       if (geojson.features.length === 0) { toast.warning("Brak obiektów w pliku"); return; }
-      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, geojson }]);
-      toast.success(`Zaimportowano ${geojson.features.length} obiektów`);
+      setKmlLayers((prev) => [...prev, { id: `vec-${Date.now()}`, name: file.name.replace(/\.[^/.]+$/, ""), visible: true, color: "#6366f1", weight: 2, crs: layerCrs, geojson }]);
+      toast.success(`Zaimportowano ${geojson.features.length} obiektów${layerCrs ? ` (${layerCrs.toUpperCase()})` : ""}`);
     } catch (err) { toast.error(`Błąd importu: ${(err as Error).message}`); }
   }, []);
 
@@ -648,6 +657,16 @@ const Index = () => {
   }, [activeDrawLayer, finalizeDrawingNow]);
 
   const handleMapClickInfo = useCallback((lat: number, lng: number, system?: CoordinateSystem) => {
+    if (parcelPickMode) {
+      queryParcelByPoint(lat, lng)
+        .then((result) => {
+          if (!result) { toast.error("Nie znaleziono działki w klikniętym miejscu"); return; }
+          handleParcelFound(result);
+          toast.success(`Dodano działkę: ${result.label}`);
+        })
+        .catch(() => toast.error("Błąd pobierania działki z ULDK"));
+      return;
+    }
     setClickedCoords({ lat, lng });
     // Gdy kliknięto zaimportowany obiekt – pokaż współrzędne w jego układzie.
     if (system) setCoordSystem(system);
@@ -665,7 +684,7 @@ const Index = () => {
       .catch(() => {
         if (terrainClickRequestRef.current === requestId) setClickedTerrainHeight({ loading: false, value: null });
       });
-  }, [handleMapClickForDrawing, photos, selectMode]);
+  }, [handleMapClickForDrawing, handleParcelFound, parcelPickMode, photos, selectMode]);
 
   // ESC: finalize in-progress drawing and deactivate layer (exit drawing mode)
   useEffect(() => {
@@ -1058,6 +1077,8 @@ const Index = () => {
           onTogglePrgParcels={setPrgParcels}
           onImportKml={handleImportKml}
           onImportVector={handleImportVector}
+          parcelPickMode={parcelPickMode}
+          onToggleParcelPickMode={() => setParcelPickMode((v) => !v)}
           wmsUrl={wmsUrl}
           wmsLayers={wmsLayers}
           wmsSelectedLayer={wmsSelectedLayer}

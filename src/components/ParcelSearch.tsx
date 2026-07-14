@@ -59,8 +59,9 @@ function wktToGeoJson(wkt: string): any | null {
 }
 
 /** Zapytanie do usługi ULDK GUGiK; zwraca geometrię GeoJSON + etykietę. */
-async function queryUldk(request: string, id: string): Promise<ParcelResult | null> {
-  const url = `https://uldk.gugik.gov.pl/?request=${request}&id=${encodeURIComponent(id)}&result=geom_wkt,teryt&srid=4326`;
+async function queryUldk(request: string, params: Record<string, string>): Promise<ParcelResult | null> {
+  const qs = new URLSearchParams({ request, result: "geom_wkt,teryt", srid: "4326", ...params });
+  const url = `https://uldk.gugik.gov.pl/?${qs.toString()}`;
   const res = await fetch(url);
   const text = await res.text();
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -72,7 +73,7 @@ async function queryUldk(request: string, id: string): Promise<ParcelResult | nu
   const first = dataLines[0];
   const parts = first.split("|");
   const wkt = parts[0];
-  const teryt = parts[1] ?? id;
+  const teryt = parts[1] ?? params.id ?? params.xy ?? "dzialka";
   const geom = wktToGeoJson(wkt);
   if (!geom) return null;
   return {
@@ -82,6 +83,10 @@ async function queryUldk(request: string, id: string): Promise<ParcelResult | nu
       features: [{ type: "Feature", properties: { teryt, name: teryt }, geometry: geom }],
     },
   };
+}
+
+export async function queryParcelByPoint(lat: number, lng: number): Promise<ParcelResult | null> {
+  return queryUldk("GetParcelByXY", { xy: `${lng},${lat}` });
 }
 
 const ParcelSearch = ({ onParcelFound }: ParcelSearchProps) => {
@@ -121,7 +126,7 @@ const ParcelSearch = ({ onParcelFound }: ParcelSearchProps) => {
     const q = idQuery.trim();
     if (!q) return;
     // Pełny identyfikator TERYT vs. "Nazwa numer" -> GetParcelByIdOrNr obsługuje oba
-    runSearch(() => queryUldk("GetParcelByIdOrNr", q));
+    runSearch(() => queryUldk("GetParcelByIdOrNr", { id: q }));
   };
 
   const searchByUnits = () => {
@@ -133,7 +138,7 @@ const ParcelSearch = ({ onParcelFound }: ParcelSearchProps) => {
     const gmPart = `${gmiCode.slice(0, 6)}_${gmiCode.slice(6)}`;
     const obrPart = obreb.trim().padStart(4, "0");
     const id = `${gmPart}.${obrPart}.${dzialka.trim()}`;
-    runSearch(async () => (await queryUldk("GetParcelById", id)) ?? (await queryUldk("GetParcelByIdOrNr", id)));
+    runSearch(async () => (await queryUldk("GetParcelById", { id })) ?? (await queryUldk("GetParcelByIdOrNr", { id })));
   };
 
   return (
